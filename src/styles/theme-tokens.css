@@ -1,21 +1,23 @@
 /* ─── Design Tokens ───────────────────────────────────────── */
 :root {
   /* Palette — Dark Gray / Black & White (Default) */
-  --bg-primary: #171717;
-  --bg-secondary: #262626;
-  --bg-tertiary: #404040;
-  --bg-glass: rgba(38, 38, 38, 0.85);
-  --bg-glass-hover: rgba(64, 64, 64, 0.85);
-  --bg-glass-active: rgba(82, 82, 82, 0.9);
+  --bg-primary: #000000;
+  --bg-secondary: #0a0a0b;
+  --bg-tertiary: #141416;
+  --bg-layer-1: #050506;
+  --bg-layer-2: #0f0f11;
+  --bg-glass: #0a0a0b;
+  --bg-glass-hover: #141416;
+  --bg-glass-active: #1c1c1f;
 
-  --border-subtle: rgba(255, 255, 255, 0.15);
-  --border-medium: rgba(255, 255, 255, 0.25);
-  --border-bright: rgba(255, 255, 255, 0.4);
+  --border-subtle: #222224;
+  --border-medium: #333336;
+  --border-bright: #444448;
   --border-glow: rgba(255, 255, 255, 0.2);
 
   --text-primary: #ffffff;
-  --text-secondary: #e5e5e5;
-  --text-muted: #a3a3a3;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
   --text-accent: #ffffff;
 
   --accent-cyan: #ffffff;
@@ -41,21 +43,23 @@
 
 [data-theme='black'] {
   /* Palette — Black & White (Previous Default) */
-  --bg-primary: #09090b;
-  --bg-secondary: #18181b;
-  --bg-tertiary: #27272a;
-  --bg-glass: rgba(9, 9, 11, 0.75);
-  --bg-glass-hover: rgba(24, 24, 27, 0.85);
-  --bg-glass-active: rgba(39, 39, 42, 0.9);
+  --bg-primary: #000000;
+  --bg-secondary: #0a0a0b;
+  --bg-tertiary: #141416;
+  --bg-layer-1: #050506;
+  --bg-layer-2: #0f0f11;
+  --bg-glass: #0a0a0b;
+  --bg-glass-hover: #141416;
+  --bg-glass-active: #1c1c1f;
 
-  --border-subtle: rgba(255, 255, 255, 0.1);
-  --border-medium: rgba(255, 255, 255, 0.2);
-  --border-bright: rgba(255, 255, 255, 0.3);
+  --border-subtle: #222224;
+  --border-medium: #333336;
+  --border-bright: #444448;
   --border-glow: rgba(255, 255, 255, 0.25);
 
   --text-primary: #ffffff;
-  --text-secondary: #e4e4e7;
-  --text-muted: #a1a1aa;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
   --text-accent: #ffffff;
 
   --accent-cyan: #ffffff;
@@ -149,10 +153,10 @@
   --duration-slow: 400ms;
 
   /* Glassmorphism Pro Max */
-  --glass-blur: 24px;
+  --glass-blur: 0px;
   --glass-border: 1px solid var(--border-subtle);
-  --glass-border-inner: inset 0 1px 1px rgba(255, 255, 255, 0.1);
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
+  --glass-border-inner: none;
+  --glass-shadow: none;
 }
 
 [data-theme='light'] {

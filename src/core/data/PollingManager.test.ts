@@ -47,6 +47,17 @@ describe("PollingManager", () => {
         expect(callback).toHaveBeenCalledTimes(1);
     });
 
+    it("does not run an immediate callback for push-only plugins", async () => {
+        const callback = vi.fn(async () => {});
+        pollingManager.register("push-only", 0, callback);
+
+        pollingManager.start("push-only");
+        await flushMicrotasks();
+        await vi.advanceTimersByTimeAsync(60_000);
+
+        expect(callback).not.toHaveBeenCalled();
+    });
+
     it("schedules recurring calls at intervalMs after the initial run", async () => {
         const callback = vi.fn(async () => {});
         pollingManager.register("test", 1_000, callback);

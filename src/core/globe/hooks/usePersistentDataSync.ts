@@ -12,6 +12,8 @@ export function usePersistentDataSync() {
             const match = document.cookie.match(/(^| )wwv_graphics=([^;]+)/);
             if (match) {
                 const saved = JSON.parse(decodeURIComponent(match[2]));
+                // Keep the debug FPS overlay opt-in from the Settings panel each session.
+                saved.showFps = false;
                 updateMapConfig(saved);
             }
         } catch (e) {

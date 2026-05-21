@@ -84,13 +84,16 @@ describe("seedDefaultPlugins", () => {
         mockCreate.mockResolvedValue({});
         mockUpdateMany.mockResolvedValue({});
 
-        mockFetch.mockImplementation(async (url: string) => ({
-            ok: true,
-            json: async () => {
-                const match = url.match(/plugins\/(.+)$/);
-                return match ? fakeManifest(match[1]) : {};
-            },
-        }));
+        mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+            if (init?.method === "HEAD") return { ok: true };
+            return {
+                ok: true,
+                json: async () => {
+                    const match = url.match(/plugins\/(.+)$/);
+                    return match ? fakeManifest(match[1]) : {};
+                },
+            };
+        });
     });
 
     it("seeds every plugin in the verified registry on a fresh install", async () => {
@@ -198,6 +201,30 @@ describe("seedDefaultPlugins", () => {
 
         // One fewer than total (the first was skipped)
         expect(mockUpsertPlugin).toHaveBeenCalledTimes(FAKE_VERIFIED_IDS.length - 1);
+    });
+
+    it("skips npm plugins when the generated bundle URL is unavailable", async () => {
+        mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+            if (init?.method === "HEAD") {
+                return { ok: !url.includes("aviation") };
+            }
+            return {
+                ok: true,
+                json: async () => {
+                    const match = url.match(/plugins\/(.+)$/);
+                    return match ? fakeManifest(match[1]) : {};
+                },
+            };
+        });
+
+        await seedDefaultPlugins();
+
+        expect(mockUpsertPlugin).toHaveBeenCalledTimes(FAKE_VERIFIED_IDS.length - 1);
+        expect(mockUpsertPlugin).not.toHaveBeenCalledWith(
+            "aviation",
+            expect.any(String),
+            expect.any(String),
+        );
     });
 
     it("stamps every seeded plugin as verified", async () => {

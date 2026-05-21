@@ -76,6 +76,12 @@ export async function seedDefaultPlugins(): Promise<void> {
                     const ver = manifest.version || "1.0.0";
                     manifest.format = "bundle";
                     manifest.entry = `https://unpkg.com/${manifest.npmPackage}@${ver}/dist/frontend.mjs`;
+                    if (!(await isBundleAvailable(manifest.entry))) {
+                        console.warn(
+                            `[DefaultPlugins] Skipping ${pluginId}: bundle not available at ${manifest.entry}`,
+                        );
+                        continue;
+                    }
                 }
 
                 const validation = validateManifest(manifest);
@@ -107,6 +113,17 @@ export async function seedDefaultPlugins(): Promise<void> {
     } catch (err) {
         console.error("[DefaultPlugins] Seeder failed:", err);
         // Never throw — seeding failure must not block the app
+    }
+}
+
+/** Confirm generated CDN bundle URLs are loadable before storing them. */
+async function isBundleAvailable(entry: unknown): Promise<boolean> {
+    if (typeof entry !== "string") return false;
+    try {
+        const res = await fetch(entry, { method: "HEAD" });
+        return res.ok;
+    } catch {
+        return false;
     }
 }
 

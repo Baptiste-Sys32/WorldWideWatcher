@@ -2,59 +2,75 @@
 
 /**
  * @file LayerPanel.tsx
- * @description Primary left-sidebar panel for managing data sources, imagery,
- * favorites, and plugin installations.
+ * @description Primary left-sidebar workspace for data, imagery, plugins, and local settings.
  * @module src/components/panels
  */
 
 import { useState } from "react";
 import {
- CircuitBoard, Download, DownloadCloud, Globe2, Puzzle, Search, Star
+    ChevronLeft,
+    CircuitBoard,
+    Globe2,
+    Puzzle,
+    Search,
+    Settings,
 } from "lucide-react";
 
-import { useStore } from "@/core/state/store";
 import { useIsMobile } from "@/core/hooks/useIsMobile";
 import { useResizablePanel } from "@/core/hooks/useResizablePanel";
 import { pluginManager } from "@/core/plugins/PluginManager";
-import { ImportPanel } from "@/plugins/geojson/ImportPanel";
-import { DiscordIcon } from "@/components/common/DiscordIcon";
+import { useStore } from "@/core/state/store";
 import { trackEvent } from "@/lib/analytics";
+import { LocalSettingsTab } from "./DataConfig/LocalSettingsTab";
 import { ImageryPicker } from "./ImageryPicker";
 import { LayerItem } from "./LayerItem";
-import { FavoritesTab } from "./FavoritesTab";
 import { PluginsTab } from "./PluginsTab";
+
 import "@/plugins/geojson/geojson-importer.css";
+import "./LayerPanel.css";
 
-import "./LayerPanel.css"
+const CATEGORY_LABELS: Record<string, string> = {
+    aviation: "Aviation",
+    maritime: "Maritime",
+    "natural-disaster": "Natural Disasters",
+    conflict: "Conflict",
+    infrastructure: "Infrastructure",
+    cyber: "Cyber",
+    economic: "Economic",
+    custom: "Custom",
+};
 
-/**
- * @component LayerPanel
- * @description The main sidebar orchestration component for data navigation.
- * Manages tabs for layers, imagery, favorites, geojson imports, and plugins.
- * Handles the recursive search and categorization of active plugins.
- */
+type LeftPanelTab = "data" | "imagery" | "plugins" | "settings";
+type PrimaryPanelTab = Exclude<LeftPanelTab, "settings">;
+
+const PRIMARY_TABS: PrimaryPanelTab[] = ["data", "imagery", "plugins"];
+const PANEL_TAB_META: Record<PrimaryPanelTab, { label: string; Icon: typeof CircuitBoard }> = {
+    data: { label: "Data", Icon: CircuitBoard },
+    imagery: { label: "Imagery", Icon: Globe2 },
+    plugins: { label: "Plugins", Icon: Puzzle },
+};
+
 export function LayerPanel() {
     const isMobile = useIsMobile();
-    const { width, startResizing } = useResizablePanel(280, 260, 800, 'left');
+    const { width, startResizing } = useResizablePanel(340, 280, 560, "left");
     const leftSidebarOpen = useStore((s) => s.leftSidebarOpen);
     const openMobilePanel = useStore((s) => s.openMobilePanel);
+    const activeTab = useStore((s) => s.activeLayerPanelTab);
+    const setActiveTab = useStore((s) => s.setActiveLayerPanelTab);
+    const toggleLeftSidebar = useStore((s) => s.toggleLeftSidebar);
+    const setOpenMobilePanel = useStore((s) => s.setOpenMobilePanel);
     const layers = useStore((s) => s.layers);
     const entitiesByPlugin = useStore((s) => s.entitiesByPlugin);
     const highlightLayerId = useStore((s) => s.highlightLayerId);
     const setHighlightLayerId = useStore((s) => s.setHighlightLayerId);
     const setConfigPanelOpen = useStore((s) => s.setConfigPanelOpen);
-    const setActiveConfigTab = useStore((s) => s.setActiveConfigTab);
     const setSelectedEntity = useStore((s) => s.setSelectedEntity);
 
-    const allPlugins = pluginManager.getAllPlugins();
     const [searchQuery, setSearchQuery] = useState("");
-
-    // Group by category
-    const grouped: Record<string, typeof allPlugins> = {};
+    const allPlugins = pluginManager.getAllPlugins();
     const query = searchQuery.toLowerCase();
 
-    const buttonWidth = "100%"
-
+    const grouped: Record<string, typeof allPlugins> = {};
     allPlugins.forEach((managed) => {
         if (
             !query
@@ -62,21 +78,29 @@ export function LayerPanel() {
             || managed.plugin.description?.toLowerCase().includes(query)
             || managed.plugin.id.toLowerCase().includes(query)
         ) {
-            const cat = managed.plugin.category;
-            if (!grouped[cat]) grouped[cat] = [];
-            grouped[cat].push(managed);
+            const category = managed.plugin.category;
+            if (!grouped[category]) grouped[category] = [];
+            grouped[category].push(managed);
         }
     });
 
-    const categoryLabels: Record<string, string> = {
-        aviation: "Aviation",
-        maritime: "Maritime",
-        "natural-disaster": "Natural Disasters",
-        conflict: "Conflict",
-        infrastructure: "Infrastructure",
-        cyber: "Cyber",
-        economic: "Economic",
-        custom: "Custom",
+    const isOpen = isMobile ? openMobilePanel === "left" : leftSidebarOpen;
+
+    const switchTab = (tab: LeftPanelTab) => {
+        setActiveTab(tab);
+        trackEvent("panel-tab-switch", { tab });
+    };
+
+    const cyclePrimaryTab = () => {
+        const current = PRIMARY_TABS.includes(activeTab as PrimaryPanelTab) ? activeTab as PrimaryPanelTab : "data";
+        const next = PRIMARY_TABS[(PRIMARY_TABS.indexOf(current) + 1) % PRIMARY_TABS.length];
+        switchTab(next);
+    };
+
+    const closePanel = () => {
+        if (isMobile) setOpenMobilePanel("left");
+        else toggleLeftSidebar();
+        trackEvent("panel-toggle", { panel: "left", open: false });
     };
 
     const handleToggle = (pluginId: string) => {
@@ -86,7 +110,7 @@ export function LayerPanel() {
             useStore.getState().setLayerEnabled(pluginId, false);
             useStore.getState().clearEntities(pluginId);
             useStore.getState().setEntityCount(pluginId, 0);
-            // Clear hovered/selected if they belong to this layer
+
             const state = useStore.getState();
             if (state.hoveredEntity?.pluginId === pluginId) {
                 state.setHoveredEntity(null, null);
@@ -100,198 +124,119 @@ export function LayerPanel() {
             useStore.getState().setHighlightLayerId(pluginId);
             useStore.getState().setSelectedEntity(null);
             useStore.getState().setConfigPanelOpen(true);
-
-            // Check if plugin requires configuration
-            const managed = pluginManager.getPlugin(pluginId);
-            const settings = useStore.getState().dataConfig.pluginSettings[pluginId];
-            if (managed?.plugin.requiresConfiguration?.(settings)) {
-                useStore.getState().setActiveConfigTab("overlay");
-            } else {
-                useStore.getState().setActiveConfigTab("intel");
-            }
         }
         trackEvent("layer-toggle", { layer: pluginId, enabled: !isEnabled });
     };
 
-    const [activeTab, setActiveTab] = useState<"layers" | "imagery" | "favorites" | "import" | "plugins">("layers");
-    const fontSize = "13px";
-
     return (
       <aside
-        className={`sidebar sidebar--left glass-panel ${isMobile ? "sidebar--mobile" : ""} ${(isMobile ? openMobilePanel === "left" : leftSidebarOpen) ? "" : "sidebar--closed"}`}
+        className={`sidebar sidebar--left glass-panel ${isMobile ? "sidebar--mobile" : ""} ${isOpen ? "" : "sidebar--closed"}`}
         style={{ width: isMobile ? undefined : width }}
       >
-        {/* Drag Handle */}
         {!isMobile && (
-        <div
-          onMouseDown={startResizing}
-          style={{
-                        position: 'absolute',
-                        top: 0,
-                        right: -4,
-                        width: 8,
-                        height: '100%',
-                        cursor: 'col-resize',
-                        zIndex: 10,
-                        backgroundColor: 'transparent'
-                    }}
-        />
-            )}
-        <div className="sidebar__title">Data Sources</div>
+          <div
+            className="resize-handle resize-handle--left"
+            onMouseDown={startResizing}
+            title="Resize data panel"
+          />
+        )}
 
-        <div
-          className="panel-tabs"
-          onWheel={(e) => {
-                    e.currentTarget.scrollLeft += e.deltaY;
-                }}
-        >
+        <div className="panel-header">
+          {activeTab === "settings" ? (
+            <div className="settings-panel-title">
+              <Settings size={15} />
+              <span>Settings</span>
+            </div>
+          ) : (
+            <>
+              <span className="sr-only">Data workspace</span>
+              <div className="panel-mode-cycler" aria-label="Layer panel mode">
+                <button
+                  type="button"
+                  className="panel-mode-button"
+                  onClick={cyclePrimaryTab}
+                  title={`Current: ${PANEL_TAB_META[activeTab as PrimaryPanelTab]?.label ?? "Data"}. Click to cycle panel mode.`}
+                  aria-label={`Current panel mode: ${PANEL_TAB_META[activeTab as PrimaryPanelTab]?.label ?? "Data"}. Click to cycle.`}
+                >
+                  {(() => {
+                      const { Icon } = PANEL_TAB_META[activeTab as PrimaryPanelTab] ?? PANEL_TAB_META.data;
+                      return <Icon size={15} />;
+                  })()}
+                </button>
+                <div className="panel-mode-dots" aria-hidden="true">
+                  {PRIMARY_TABS.map((tab) => (
+                    <span key={tab} className={`panel-mode-dot ${activeTab === tab ? "panel-mode-dot--active" : ""}`} />
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
           <button
-            className={`panel-tab ${activeTab === "layers" ? "panel-tab--active" : ""}`}
-            onClick={() => { setActiveTab("layers"); trackEvent("panel-tab-switch", { tab: "layers" }); }}
-            title="Data Layers"
-            style={{width: buttonWidth}}
+            type="button"
+            className="collapse-btn"
+            onClick={closePanel}
+            title="Hide data panel"
+            aria-label="Hide data panel"
           >
-            <CircuitBoard size="20" style={{margin: 5, maxHeight: "20%"}} />
-          </button>
-          <button
-            className={`panel-tab ${activeTab === "imagery" ? "panel-tab--active" : ""}`}
-            onClick={() => { setActiveTab("imagery"); trackEvent("panel-tab-switch", { tab: "imagery" }); }}
-            title="Imagery"
-            style={{width: buttonWidth}}
-          >
-            <Globe2 size="20" style={{margin: 5, maxHeight: "20%"}} />
-          </button>
-          <button
-            className={`panel-tab ${activeTab === "favorites" ? "panel-tab--active" : ""}`}
-            onClick={() => { setActiveTab("favorites"); trackEvent("panel-tab-switch", { tab: "favorites" }); }}
-            title="Favorites"
-            style={{width: buttonWidth}}
-          >
-            <Star size="20" style={{margin: 5, maxHeight: "20%"}} />
-          </button>
-          <button
-            className={`panel-tab ${activeTab === "import" ? "panel-tab--active" : ""}`}
-            onClick={() => { setActiveTab("import"); trackEvent("panel-tab-switch", { tab: "import" }); }}
-            title="Import"
-            style={{width: buttonWidth}}
-          >
-            <DownloadCloud size="20" style={{margin: 5,maxHeight: "20%"}} />
-          </button>
-          <button
-            className={`panel-tab ${activeTab === "plugins" ? "panel-tab--active" : ""}`}
-            onClick={() => { setActiveTab("plugins"); trackEvent("panel-tab-switch", { tab: "plugins" }); }}
-            title="Plugins"
-            style={{width: buttonWidth}}
-          >
-            <Puzzle size="20" style={{margin: 5,maxHeight: "20%"}} />
+            <ChevronLeft size={16} />
           </button>
         </div>
 
-        {activeTab === "layers" && (
+        {activeTab === "data" && (
           <div className="layers-tab-content">
-            <div style={{ padding: "0 var(--space-md) var(--space-md) var(--space-md)" }}>
-              <div style={{
-                            display: "flex",
-                            alignItems: "center",
-                            background: "var(--bg-layer-2)",
-                            border: "1px solid var(--border-subtle)",
-                            borderRadius: "var(--radius-sm)",
-                            padding: "0 var(--space-sm)",
-                        }}
-              >
-                <Search size={14} style={{ color: "var(--text-muted)", marginRight: 8 }} />
+            <div className="layers-tab-search-wrapper">
+              <div className="layers-tab-search">
+                <Search size={14} />
                 <input
                   type="text"
-                  placeholder="Search layers..."
+                  placeholder="Filter feeds..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  style={{
-                                    flex: 1,
-                                    background: "transparent",
-                                    border: "none",
-                                    color: "var(--text-primary)",
-                                    fontSize: "13px",
-                                    padding: "var(--space-sm) 0",
-                                    outline: "none"
-                                }}
                 />
               </div>
             </div>
             <div className="layers-tab-content__list">
               {Object.entries(grouped).map(([category, plugins]) => (
-                <div key={category} style={{ marginBottom: "var(--space-lg)" }}>
-                  <div
-                    style={{
-                                        fontSize: 10,
-                                        fontWeight: 600,
-                                        letterSpacing: "0.08em",
-                                        textTransform: "uppercase",
-                                        color: "var(--text-muted)",
-                                        marginBottom: "var(--space-sm)",
-                                        paddingLeft: "var(--space-md)",
-                                    }}
-                  >
-                    {categoryLabels[category] || category}
-                  </div>
+                <section key={category}>
+                  <div className="layer-category-title">{CATEGORY_LABELS[category] || category}</div>
                   {plugins.map((managed) => {
-                                    const isEnabled = layers[managed.plugin.id]?.enabled || false;
-                                    const isLoading = layers[managed.plugin.id]?.loading || false;
-                                    const count = (entitiesByPlugin[managed.plugin.id] || []).length;
+                      const isEnabled = layers[managed.plugin.id]?.enabled || false;
+                      const isLoading = layers[managed.plugin.id]?.loading || false;
+                      const count = (entitiesByPlugin[managed.plugin.id] || []).length;
 
-                                    return (
-                                      <LayerItem
-                                        key={managed.plugin.id}
-                                        plugin={managed.plugin}
-                                        isEnabled={isEnabled}
-                                        isLoading={isLoading}
-                                        entityCount={count}
-                                        isSelected={highlightLayerId === managed.plugin.id}
-                                        onToggle={() => handleToggle(managed.plugin.id)}
-                                        onSelect={() => {
-                                                const newId = highlightLayerId === managed.plugin.id ? null : managed.plugin.id;
-                                                setHighlightLayerId(newId);
-                                                if (newId) {
-                                                    setSelectedEntity(null);
-                                                    setConfigPanelOpen(true);
-                                                    setActiveConfigTab("intel");
-                                                }
-                                            }}
-                                      />
-                                    );
-                                })}
-                </div>
-                        ))}
+                      return (
+                        <LayerItem
+                          key={managed.plugin.id}
+                          plugin={managed.plugin}
+                          isEnabled={isEnabled}
+                          isLoading={isLoading}
+                          entityCount={count}
+                          isSelected={highlightLayerId === managed.plugin.id}
+                          onToggle={() => handleToggle(managed.plugin.id)}
+                          onSelect={() => {
+                              const newId = highlightLayerId === managed.plugin.id ? null : managed.plugin.id;
+                              setHighlightLayerId(newId);
+                              if (newId) {
+                                  setSelectedEntity(null);
+                                  setConfigPanelOpen(true);
+                              }
+                          }}
+                        />
+                      );
+                  })}
+                </section>
+              ))}
             </div>
-            <a
-              href="https://discord.gg/k3F2N4eKnr"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="discord-sidebar-link"
-              onClick={() => trackEvent("discord-link-click")}
-              style={{width: "100%", height: "42px"}}
-            >
-              <DiscordIcon size={18} />
-              <span>Join our Discord</span>
-            </a>
           </div>
-            )}
+        )}
 
-        {activeTab === "imagery" && (
-          <ImageryPicker />
-            )}
-
-        {activeTab === "favorites" && (
-          <FavoritesTab />
-            )}
-
-        {activeTab === "import" && (
-          <ImportPanel />
-            )}
-
-        {activeTab === "plugins" && (
-          <PluginsTab />
-            )}
-
+        {activeTab === "imagery" && <ImageryPicker />}
+        {activeTab === "plugins" && <PluginsTab />}
+        {activeTab === "settings" && (
+          <div className="local-settings-shell">
+            <LocalSettingsTab />
+          </div>
+        )}
       </aside>
     );
 }

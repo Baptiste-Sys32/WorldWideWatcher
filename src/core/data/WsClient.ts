@@ -2,6 +2,7 @@ import type { WsStreamPayload, GeoEntity } from "@worldwideview/wwv-plugin-sdk";
 import { dataBus } from "./DataBus";
 import { pluginManager } from "../plugins/PluginManager";
 import { useStore } from "../state/store";
+import { normalizeAviationEntities } from "./normalizeAviationEntities";
 
 interface EngineConnection {
   ws: WebSocket | null;
@@ -136,6 +137,8 @@ class WebSocketClient {
     }
 
     console.debug(`[WSClient] 🔄 Dispatching ${finalEntities.length} entities for ${pluginId} to DataBus`);
+
+    finalEntities = normalizeAviationEntities(pluginId, finalEntities);
 
     dataBus.emit("dataUpdated", {
       pluginId,

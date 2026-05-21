@@ -14,19 +14,6 @@ import { pluginManager } from "@/core/plugins/PluginManager";
 import type { WorldPlugin } from "@/core/plugins/PluginTypes";
 import "./LayerItem.css";
 
-// ─── Category Labels ────────────────────────────────────────
-
-const CATEGORY_LABELS: Record<string, string> = {
-    aviation: "Aviation",
-    maritime: "Maritime",
-    "natural-disaster": "Natural Disaster",
-    conflict: "Conflict",
-    infrastructure: "Infrastructure",
-    cyber: "Cyber",
-    economic: "Economic",
-    custom: "Custom",
-};
-
 // ─── Trust Helpers ──────────────────────────────────────────
 
 type TrustTier = "built-in" | "verified" | "unverified";

@@ -34,7 +34,9 @@ describe('uiSlice', () => {
         expect(state.selectedEntity).toBeNull();
         expect(state.floatingStreams).toEqual([]);
         expect(state.activeConfigTab).toBe('filters');
-        expect(state.activeBottomPanel).toBeNull();
+        expect(state.activeLayerPanelTab).toBe('data');
+        expect(state.activeRightOverlay).toBeNull();
+        expect(state.activeBottomPanel).toBe('timeline');
         expect(state.bottomPanelHeight).toBe(220);
     });
 

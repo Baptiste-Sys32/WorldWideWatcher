@@ -12,6 +12,13 @@ export function BottomPanelManager() {
     const bottomPanelHeight = useStore((s) => s.bottomPanelHeight);
     const setBottomPanelHeight = useStore((s) => s.setBottomPanelHeight);
     const layers = useStore((s) => s.layers);
+    const cameraLat = useStore((s) => s.cameraLat);
+    const cameraLon = useStore((s) => s.cameraLon);
+    const cameraAlt = useStore((s) => s.cameraAlt);
+    const cameraHeading = useStore((s) => s.cameraHeading);
+    const cameraPitch = useStore((s) => s.cameraPitch);
+    const cameraRoll = useStore((s) => s.cameraRoll);
+    const fps = useStore((s) => s.fps);
 
     const [mountedPanel, setMountedPanel] = useState<string | null>(activeBottomPanel);
 
@@ -25,6 +32,12 @@ export function BottomPanelManager() {
     );
 
     const isCoveredRef = useRef(false);
+    const formatCoord = (value: number, positive: string, negative: string) => {
+        const suffix = value >= 0 ? positive : negative;
+        return `${Math.abs(value).toFixed(4)} ${suffix}`;
+    };
+    const formatAlt = (value: number) => (value > 10000 ? `${(value / 1000).toFixed(2)} km` : `${value.toFixed(0)} m`);
+    const formatDeg = (value: number) => `${value.toFixed(1)}°`;
 
     useEffect(() => {
         if (activeBottomPanel) {
@@ -122,6 +135,23 @@ export function BottomPanelManager() {
             return <Timeline />;
         }
 
+        if (mountedPanel === "camera-stats") {
+            return (
+              <div className="camera-stats-panel">
+                <div className="camera-stats-panel__title">Camera Stats</div>
+                <div className="camera-stats-panel__grid">
+                  <div><span>Latitude</span><strong>{formatCoord(cameraLat, "N", "S")}</strong></div>
+                  <div><span>Longitude</span><strong>{formatCoord(cameraLon, "E", "W")}</strong></div>
+                  <div><span>Altitude</span><strong>{formatAlt(cameraAlt)}</strong></div>
+                  <div><span>Heading</span><strong>{formatDeg(cameraHeading)}</strong></div>
+                  <div><span>Pitch</span><strong>{formatDeg(cameraPitch)}</strong></div>
+                  <div><span>Roll</span><strong>{formatDeg(cameraRoll)}</strong></div>
+                  <div><span>FPS</span><strong>{fps}</strong></div>
+                </div>
+              </div>
+            );
+        }
+
         const managed = pluginManager.getPlugin(mountedPanel);
         if (managed && managed.plugin.getBottomPanelComponent) {
             const Comp = managed.plugin.getBottomPanelComponent();
@@ -153,8 +183,20 @@ export function BottomPanelManager() {
                     </svg>
                     <span className="dock-btn-label">Timeline</span>
                 </button>
+
+                <button
+                  className={`dock-btn ${activeBottomPanel === "camera-stats" ? "active" : ""}`}
+                  onClick={() => setActiveBottomPanel(activeBottomPanel === "camera-stats" ? null : "camera-stats")}
+                  title="Camera stats"
+                >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+                        <circle cx="12" cy="13" r="3" />
+                    </svg>
+                    <span className="dock-btn-label">Camera Stats</span>
+                </button>
                 
-                {dockablePlugins.map((plugin) => (
+                {activeBottomPanel && activeBottomPanel !== "camera-stats" && dockablePlugins.map((plugin) => (
                     <button
                         key={plugin.id}
                         className={`dock-btn ${activeBottomPanel === plugin.id ? "active" : ""}`}

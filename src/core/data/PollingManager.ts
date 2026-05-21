@@ -62,6 +62,14 @@ class PollingManager {
         const task = this.tasks.get(pluginId);
         if (!task || task.timerId) return;
 
+        const effectiveInterval = this.getEffectiveInterval(task);
+        if (effectiveInterval <= 0) {
+            // WebSocket-driven plugins use pollingInterval 0 and should not
+            // perform an HTTP cold-start fetch.
+            task.timerId = "ws-push-only" as any;
+            return;
+        }
+
         const run = async () => {
             if (task.isPaused) return;
             try {
@@ -78,13 +86,7 @@ class PollingManager {
 
         // Run immediately, then set interval if > 0
         run();
-        const effectiveInterval = this.getEffectiveInterval(task);
-        if (effectiveInterval > 0) {
-            task.timerId = setInterval(run, effectiveInterval);
-        } else {
-            // For WebSocket-driven push plugins, mark as started
-            task.timerId = "ws-push-only" as any;
-        }
+        task.timerId = setInterval(run, effectiveInterval);
     }
 
     stop(pluginId: string): void {

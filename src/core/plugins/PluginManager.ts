@@ -15,6 +15,7 @@ import { trackEvent } from "@/lib/analytics";
 import { resolveEngineUrl } from "@/core/data/resolveEngineUrl";
 import { fetchLocalEngineManifest } from "@/core/data/engineManifest";
 import { pluginRegistry } from "@/core/plugins/PluginRegistry";
+import { normalizeAviationEntities } from "@/core/data/normalizeAviationEntities";
 
 /**
  * ManagedPlugin represents the internal state and instance of a registered data source.
@@ -129,12 +130,17 @@ class PluginManager {
             .replace(/^ws:\/\//, "http://")
             .replace(/^wss:\/\//, "https://");
 
+        const getHttpEngineUrl = () => {
+            if (plugin.id === "aviation" && typeof window !== "undefined") {
+                return window.location.origin;
+            }
+            const ws = resolveEngineUrl(plugin.id);
+            return ws.replace(/\/stream$/, "").replace(/^ws:\/\//, "http://").replace(/^wss:\/\//, "https://");
+        };
+
         const context: PluginContext = {
             apiBaseUrl,
-            getEngineUrl: () => {
-                const ws = resolveEngineUrl(plugin.id);
-                return ws.replace(/\/stream$/, "").replace(/^ws:\/\//, "http://").replace(/^wss:\/\//, "https://");
-            },
+            getEngineUrl: getHttpEngineUrl,
             env: envVars,
             edition,
             timeRange: {
@@ -184,9 +190,13 @@ class PluginManager {
         });
 
         // Register polling
+        const pollingInterval = plugin.id === "aviation" && plugin.getPollingInterval() <= 0
+            ? 15_000
+            : plugin.getPollingInterval();
+
         pollingManager.register(
             plugin.id,
-            plugin.getPollingInterval(),
+            pollingInterval,
             async () => {
                 const managed = this.plugins.get(plugin.id);
                 if (!managed || !managed.enabled) return;
@@ -449,10 +459,11 @@ class PluginManager {
     private handleDataUpdate(pluginId: string, entities: GeoEntity[]): void {
         const managed = this.plugins.get(pluginId);
         if (!managed) return;
-        managed.entities = entities;
+        const normalizedEntities = normalizeAviationEntities(pluginId, entities);
+        managed.entities = normalizedEntities;
 
-        cacheLayer.set(pluginId, entities, this.configCacheMaxAge);
-        dataBus.emit("dataUpdated", { pluginId, entities });
+        cacheLayer.set(pluginId, normalizedEntities, this.configCacheMaxAge);
+        dataBus.emit("dataUpdated", { pluginId, entities: normalizedEntities });
 
         // Clear loading indicator once first data arrives
         dataBus.emit("layerLoadingChanged", { pluginId, loading: false });

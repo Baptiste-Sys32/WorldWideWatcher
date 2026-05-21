@@ -8,11 +8,10 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { LayerPanel } from "@/components/panels/LayerPanel";
 import { EntityInfoCard } from "@/components/panels/EntityInfoCard";
 import { DataConfigPanel } from "@/components/panels/DataConfig";
-import CameraStatsPanel from "@/components/panels/CameraStatsPanel";
 import { BottomPanelManager } from "@/components/layout/BottomPanelManager";
 import { TimelineSync } from "@/core/globe/TimelineSync";
 import { pluginManager } from "@/core/plugins/PluginManager";
@@ -25,7 +24,6 @@ import { FloatingVideoManager } from "@/components/video/FloatingVideoManager";
 import { BootOverlay } from "@/components/common/BootOverlay";
 
 import { useBootSequence } from "@/core/hooks/useBootSequence";
-import { useIsMobile } from "@/core/hooks/useIsMobile";
 import { useMarketplaceSync } from "@/core/hooks/useMarketplaceSync";
 import dynamic from "next/dynamic";
 import { trackEvent } from "@/lib/analytics";
@@ -37,8 +35,6 @@ import { isDemo } from "@/core/edition";
 
 import { injectHostGlobals } from "@/core/plugins/hostGlobals";
 import { initLogCatcher } from "@/lib/logCatcher";
-import { MobileCameraStats } from "./MobileCameraStats";
-import { MobileHudBar } from "./MobileHudBar";
 import { AgentBusSubscriber } from "./AgentBusSubscriber";
 import { DataBusSubscriber } from "./DataBusSubscriber";
 import { Header } from "./Header";
@@ -61,7 +57,6 @@ const GlobeView = dynamic(() => import("@/core/globe/GlobeView"), {
 export function AppShell() {
     const initLayer = useStore((s) => s.initLayer);
     const boot = useBootSequence();
-    const isMobile = useIsMobile();
     const [bootStart] = useState(() => Date.now());
     const [hostReady, setHostReady] = useState(false);
     const {
@@ -73,7 +68,7 @@ export function AppShell() {
     useEffect(() => {
         try {
             const storedTheme = localStorage.getItem("wwv-theme");
-            if (storedTheme === "light" || storedTheme === "dark") {
+            if (storedTheme === "light" || storedTheme === "dark" || storedTheme === "legacy" || storedTheme === "black") {
                 setTheme(storedTheme);
             }
         } catch { /* ignore hydration errors */ }
@@ -194,12 +189,9 @@ export function AppShell() {
         <AgentBusSubscriber />
 
         <Header />
-        {isMobile && <MobileHudBar />}
-        {isMobile && <MobileCameraStats />}
         <PanelToggleArrows />
         <LayerPanel />
         <DataConfigPanel />
-        {!isMobile && <CameraStatsPanel />}
         <EntityInfoCard />
         <BottomPanelManager />
         <FloatingVideoManager />

@@ -56,7 +56,11 @@ export interface UISlice {
     /** List of active floating stream windows. */
     floatingStreams: FloatingStream[];
     /** The active sub-tab within the configuration panel. */
-    activeConfigTab: "intel" | "filters" | "cache" | "overlay" | "apikeys";
+    activeConfigTab: "intel" | "filters" | "cache" | "overlay" | "apikeys" | "settings";
+    /** The active tab in the primary left panel. */
+    activeLayerPanelTab: "data" | "imagery" | "plugins" | "settings";
+    /** Temporary right-side header panel, shown over the inspector. */
+    activeRightOverlay: "map" | "filters" | null;
     /** The ID of a layer currently being highlighted/flashed in the UI. */
     highlightLayerId: string | null;
     /** Active panel in mobile view layout. */
@@ -92,7 +96,11 @@ export interface UISlice {
     /** Updates properties (position, size, state) of an existing stream window. */
     updateFloatingStream: (id: string, updates: Partial<FloatingStream>) => void;
     /** Switches between configuration tabs. */
-    setActiveConfigTab: (tab: "intel" | "filters" | "cache" | "overlay" | "apikeys") => void;
+    setActiveConfigTab: (tab: "intel" | "filters" | "cache" | "overlay" | "apikeys" | "settings") => void;
+    /** Switches between primary left panel tabs. */
+    setActiveLayerPanelTab: (tab: "data" | "imagery" | "plugins" | "settings") => void;
+    /** Opens/closes a temporary right-side header panel. */
+    setActiveRightOverlay: (panel: "map" | "filters" | null) => void;
     /** Triggers a visual highlight on a specific layer in the layer list. */
     setHighlightLayerId: (id: string | null) => void;
     /** Explicitly sets the configuration panel visibility. */
@@ -130,6 +138,8 @@ export const createUISlice: StateCreator<AppStore, [], [], UISlice> = (set) => (
     lockedEntityId: null,
     floatingStreams: [],
     activeConfigTab: "filters",
+    activeLayerPanelTab: "data",
+    activeRightOverlay: null,
     highlightLayerId: null,
     openMobilePanel: null,
     mobileRightPanelGlow: false,
@@ -196,6 +206,8 @@ export const createUISlice: StateCreator<AppStore, [], [], UISlice> = (set) => (
             floatingStreams: state.floatingStreams.map((s) => (s.id === id ? { ...s, ...updates } : s))
         })),
     setActiveConfigTab: (tab) => set({ activeConfigTab: tab }),
+    setActiveLayerPanelTab: (tab) => set({ activeLayerPanelTab: tab, leftSidebarOpen: true }),
+    setActiveRightOverlay: (panel) => set({ activeRightOverlay: panel, configPanelOpen: true }),
     setHighlightLayerId: (id) => set({ highlightLayerId: id }),
     setConfigPanelOpen: (open) => set({ configPanelOpen: open }),
     setOpenMobilePanel: (panel) => set((state) => ({

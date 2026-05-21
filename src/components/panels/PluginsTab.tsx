@@ -119,7 +119,7 @@ function getName(record: PluginRecord): string {
  * Facilitates asynchronous plugin operations (install/uninstall/update)
  * and verifies integrity via trust badges.
  */
-export function PluginsTab() {
+export function PluginsTab({ showMarketplaceActions = false }: { showMarketplaceActions?: boolean }) {
     const [plugins, setPlugins] = useState<PluginRecord[]>([]);
     const [removing, setRemoving] = useState<string | null>(null);
     const [updates, setUpdates] = useState<Record<string, string>>({});
@@ -294,7 +294,7 @@ export function PluginsTab() {
               <div className="plugins-tab__empty-icon">🧩</div>
               <div>No plugins installed yet</div>
             </div>
-            <BrowseLink />
+            {showMarketplaceActions && <BrowseLink />}
           </div>
         );
     }
@@ -443,7 +443,7 @@ export function PluginsTab() {
                 )}
         </div>
 
-        {canInstall && (
+        {canInstall && showMarketplaceActions && (
         <div className="plugins-tab__actions-bottom">
           <BrowseLink />
 

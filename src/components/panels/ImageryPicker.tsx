@@ -15,7 +15,6 @@ import {
  Globe, Grid2X2, Layout, Layers
 } from "lucide-react";
 import { trackEvent } from "@/lib/analytics";
-import { GraphicsSettings } from "./GraphicsSettings";
 
 /**
  * @component ImageryPicker
@@ -92,13 +91,6 @@ export function ImageryPicker() {
                         );
                     })}
           </div>
-        </div>
-
-        <div className="imagery-picker__divider" />
-
-        <div className="imagery-picker__section">
-          <div className="imagery-picker__title">Graphics</div>
-          <GraphicsSettings />
         </div>
       </div>
     );
