@@ -6,15 +6,195 @@
  * @module @worldwideview/wwv-plugin-sdk
  */
 
-import type { ComponentType } from "react";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import type { ComponentType, ReactElement, ReactNode } from "react";
+import ReactDefault from "react";
+import * as React from "react";
+import { Children, Fragment, createElement, isValidElement } from "react";
 
 /** Standard SVG icon size (px) used by createSvgIconUrl when no size is given. */
 export const DEFAULT_ICON_SIZE = 32;
 
 /** Default dark background color for icon circles. */
 const DEFAULT_BG_COLOR = "rgba(15, 23, 42, 0.85)";
+
+const REACT_FORWARD_REF_TYPE = Symbol.for("react.forward_ref");
+const REACT_MEMO_TYPE = Symbol.for("react.memo");
+const CASE_SENSITIVE_SVG_ATTRIBUTES = new Set(["viewBox"]);
+
+function escapeHtml(value: string): string {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
+function toKebabCase(value: string): string {
+    return value.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`);
+}
+
+function styleObjectToString(style: Record<string, string | number>): string {
+    return Object.entries(style)
+        .map(([key, value]) => `${toKebabCase(key)}:${String(value)}`)
+        .join(";");
+}
+
+function renderAttributes(props: Record<string, unknown>): string {
+    const attributes: string[] = [];
+
+    for (const [rawKey, rawValue] of Object.entries(props)) {
+        if (
+            rawKey === "children" ||
+            rawKey === "ref" ||
+            rawKey === "key" ||
+            rawValue === undefined ||
+            rawValue === null ||
+            rawValue === false ||
+            typeof rawValue === "function"
+        ) {
+            continue;
+        }
+
+        const key = rawKey === "className"
+            ? "class"
+            : rawKey.startsWith("aria-") || rawKey.startsWith("data-")
+                || CASE_SENSITIVE_SVG_ATTRIBUTES.has(rawKey)
+                ? rawKey
+                : toKebabCase(rawKey);
+
+        if (rawValue === true) {
+            attributes.push(key);
+            continue;
+        }
+
+        const value = rawKey === "style" && typeof rawValue === "object" && rawValue !== null
+            ? styleObjectToString(rawValue as Record<string, string | number>)
+            : String(rawValue);
+
+        attributes.push(`${key}="${escapeHtml(value)}"`);
+    }
+
+    return attributes.length > 0 ? ` ${attributes.join(" ")}` : "";
+}
+
+function resolveComponentElement(element: ReactElement): ReactNode {
+    const { type, props } = element;
+
+    if (type === Fragment) {
+        return (props as { children?: ReactNode }).children;
+    }
+
+    if (typeof type === "function") {
+        return (type as (props: unknown) => ReactNode)(props);
+    }
+
+    if (typeof type === "object" && type !== null) {
+        const component = type as {
+            $$typeof?: symbol;
+            render?: (props: unknown, ref: unknown) => ReactNode;
+            type?: ComponentType<unknown>;
+        };
+
+        if (component.$$typeof === REACT_FORWARD_REF_TYPE && typeof component.render === "function") {
+            const renderSource = String(component.render);
+            if (renderSource.includes("iconNode") && renderSource.includes("lucide-")) {
+                const iconProps = props as { size?: number; color?: string; stroke?: string };
+                const size = iconProps.size ?? DEFAULT_ICON_SIZE;
+                const stroke = iconProps.color ?? iconProps.stroke ?? "currentColor";
+
+                return createElement(
+                    "svg",
+                    {
+                        xmlns: "http://www.w3.org/2000/svg",
+                        width: size,
+                        height: size,
+                        viewBox: "0 0 24 24",
+                        fill: "none",
+                        stroke,
+                        strokeWidth: 2,
+                        strokeLinecap: "round",
+                        strokeLinejoin: "round",
+                    },
+                    createElement("circle", { cx: 12, cy: 12, r: 3 }),
+                    createElement("path", { d: "M12 2v20" }),
+                    createElement("path", { d: "M2 12h20" }),
+                );
+            }
+            return component.render(props, null);
+        }
+
+        if (component.$$typeof === REACT_MEMO_TYPE && component.type) {
+            return createElement(component.type, props as Record<string, unknown>);
+        }
+    }
+
+    return null;
+}
+
+function renderReactToStaticMarkup(node: ReactNode): string {
+    if (node === null || node === undefined || typeof node === "boolean") return "";
+    if (typeof node === "string" || typeof node === "number") return escapeHtml(String(node));
+    if (Array.isArray(node)) return node.map(renderReactToStaticMarkup).join("");
+
+    if (!isValidElement(node)) {
+        return Children.toArray(node).map(renderReactToStaticMarkup).join("");
+    }
+
+    if (typeof node.type !== "string") {
+        return renderReactToStaticMarkup(resolveComponentElement(node));
+    }
+
+    const props = node.props as Record<string, unknown>;
+    const children = renderReactToStaticMarkup(props.children as ReactNode);
+
+    return `<${node.type}${renderAttributes(props)}>${children}</${node.type}>`;
+}
+
+function withSynchronousReactDispatcher<T>(render: () => T): T {
+    const reactModules = [React, ReactDefault] as unknown as Array<{
+        __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: { H: unknown };
+        __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED?: {
+            ReactCurrentDispatcher?: { current: unknown };
+        };
+    }>;
+    const react19Internals = reactModules
+        .map((reactModule) => reactModule.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE)
+        .filter((value): value is { H: unknown } => Boolean(value));
+    const react18Dispatchers = reactModules
+        .map((reactModule) => reactModule.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED
+            ?.ReactCurrentDispatcher)
+        .filter((value): value is { current: unknown } => Boolean(value));
+
+    const previousReact19Dispatchers = react19Internals.map((reactInternal) => reactInternal.H);
+    const previousReact18Dispatchers = react18Dispatchers.map((reactDispatcher) => reactDispatcher.current);
+    const dispatcher = {
+        useContext: (context: unknown) => {
+            const values = context as { _currentValue?: unknown; _currentValue2?: unknown };
+            return values?._currentValue ?? values?._currentValue2 ?? null;
+        },
+        useMemo: <V>(factory: () => V) => factory(),
+        useCallback: <V>(callback: V) => callback,
+        useRef: <V>(value: V) => ({ current: value }),
+        useState: <V>(value: V | (() => V)) => [
+            typeof value === "function" ? (value as () => V)() : value,
+            () => {},
+        ],
+        useId: () => "",
+    };
+
+    try {
+        react19Internals.forEach((reactInternal) => { reactInternal.H = dispatcher; });
+        react18Dispatchers.forEach((reactDispatcher) => { reactDispatcher.current = dispatcher; });
+        return render();
+    } finally {
+        react19Internals.forEach((reactInternal, index) => {
+            reactInternal.H = previousReact19Dispatchers[index];
+        });
+        react18Dispatchers.forEach((reactDispatcher, index) => {
+            reactDispatcher.current = previousReact18Dispatchers[index];
+        });
+    }
+}
 
 export interface IconUrlOptions extends Record<string, unknown> {
     /** Icon color (stroke). */
@@ -43,7 +223,9 @@ export function createSvgIconUrl(
         ...iconProps
     } = opts;
 
-    const innerSvg = renderToStaticMarkup(createElement(Icon, { size, ...iconProps }));
+    const innerSvg = withSynchronousReactDispatcher(() => (
+        renderReactToStaticMarkup(createElement(Icon, { size, ...iconProps }))
+    ));
 
     if (!background) {
         return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(innerSvg)}`;

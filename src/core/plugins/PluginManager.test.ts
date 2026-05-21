@@ -188,6 +188,23 @@ describe("PluginManager — data flow contract", () => {
         // Public accessor reflects the update
         expect(pluginManager.getEntities("df-1")).toEqual(entities);
     });
+
+    it("normalizes returned entity plugin IDs to the host registry ID", async () => {
+        const dataHandler = vi.fn();
+        dataBus.on("dataUpdated", dataHandler);
+        await pluginManager.registerPlugin(makePlugin({ id: "nuclear-facilities" }));
+
+        const incoming = [makeEntity("plant-1", "nuclear")];
+        pluginManager.getPlugin("nuclear-facilities")!.context.onDataUpdate(incoming);
+
+        const expected = [{ ...incoming[0], pluginId: "nuclear-facilities" }];
+        expect(cacheLayer.get("nuclear-facilities")).toEqual(expected);
+        expect(pluginManager.getEntities("nuclear-facilities")).toEqual(expected);
+        expect(dataHandler).toHaveBeenCalledWith({
+            pluginId: "nuclear-facilities",
+            entities: expected,
+        });
+    });
 });
 
 describe("PluginManager — getAllEntities filters by enabled flag", () => {

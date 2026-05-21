@@ -1,0 +1,56 @@
+name: Playwright Tests
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+permissions:
+  contents: read
+jobs:
+  test:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+    - uses: actions/checkout@v4
+    
+    - uses: pnpm/action-setup@v3
+      with:
+        version: 9.15.4
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: 'pnpm'
+
+    - name: Install dependencies
+      run: pnpm install
+
+    - name: Install Playwright Browsers
+      run: pnpm exec playwright install --with-deps
+
+    - name: Run Project Setup
+      run: pnpm run setup
+
+    - name: Boot Database
+      run: |
+        docker network create coolify || true
+        pnpm run predev
+
+    - name: Run Playwright tests
+      env:
+        # Prevent Firefox from loading the AT-SPI/MSAA accessibility bridge on
+        # Linux CI — without this, Firefox hangs for ~20 min waiting for a bus
+        # that doesn't exist on ubuntu-latest runners.
+        NO_AT_BRIDGE: ${{ matrix.browser == 'firefox' && '1' || '0' }}
+      run: pnpm test:e2e --project=${{ matrix.browser }}
+      
+    - uses: actions/upload-artifact@v4
+      if: ${{ !cancelled() }}
+      with:
+        name: playwright-report-${{ matrix.browser }}
+        path: playwright-report/
+        retention-days: 30

@@ -1,0 +1,121 @@
+name: Test Setup Scripts
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  test-bash:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Start local HTTP server
+        run: |
+          python3 -m http.server 8080 &
+          sleep 2 # Wait for server to start
+
+      - name: Patch setup.sh to use local server
+        run: |
+          sed -i 's|https://raw.githubusercontent.com/silvertakana/worldwideview/main|http://localhost:8080|g' self-host/setup.sh
+
+      - name: Run setup.sh
+        run: |
+          cd self-host
+          bash setup.sh
+
+      - name: Verify .env generation
+        run: |
+          cd self-host
+          if [ ! -f .env ]; then
+            echo ".env file was not created"
+            exit 1
+          fi
+          
+          if ! grep -q "^AUTH_SECRET=[a-f0-9]\{64\}$" .env; then
+            echo "AUTH_SECRET was not generated correctly or is missing"
+            exit 1
+          fi
+
+      - name: Verify docker-compose.yml download
+        run: |
+          cd self-host
+          if [ ! -f docker-compose.yml ]; then
+            echo "docker-compose.yml was not downloaded"
+            exit 1
+          fi
+
+      - name: Verify Docker containers are running
+        run: |
+          cd self-host
+          docker compose ps
+          if ! docker compose ps | grep -q "Up"; then
+            echo "Docker containers failed to start"
+            exit 1
+          fi
+
+  test-powershell:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Start local HTTP server
+        run: |
+          python3 -m http.server 8080 &
+          sleep 2 # Wait for server to start
+
+      - name: Patch setup.ps1 to use local server
+        run: |
+          sed -i 's|https://raw.githubusercontent.com/silvertakana/worldwideview/main|http://localhost:8080|g' self-host/setup.ps1
+
+      - name: Run setup.ps1
+        run: |
+          cd self-host
+          pwsh ./setup.ps1
+
+      - name: Verify .env generation
+        run: |
+          cd self-host
+          if [ ! -f .env ]; then
+            echo ".env file was not created"
+            exit 1
+          fi
+          
+          if ! grep -q "^AUTH_SECRET=[a-f0-9]\{64\}$" .env; then
+            echo "AUTH_SECRET was not generated correctly or is missing"
+            exit 1
+          fi
+
+      - name: Verify docker-compose.yml download
+        run: |
+          cd self-host
+          if [ ! -f docker-compose.yml ]; then
+            echo "docker-compose.yml was not downloaded"
+            exit 1
+          fi
+
+      - name: Verify Docker containers are running
+        run: |
+          cd self-host
+          docker compose ps
+          if ! docker compose ps | grep -q "Up"; then
+            echo "Docker containers failed to start"
+            exit 1
+          fi

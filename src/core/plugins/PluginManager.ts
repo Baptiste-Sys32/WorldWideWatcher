@@ -459,7 +459,10 @@ class PluginManager {
     private handleDataUpdate(pluginId: string, entities: GeoEntity[]): void {
         const managed = this.plugins.get(pluginId);
         if (!managed) return;
-        const normalizedEntities = normalizeAviationEntities(pluginId, entities);
+        const normalizedEntities = normalizeAviationEntities(pluginId, entities).map((entity) => ({
+            ...entity,
+            pluginId,
+        }));
         managed.entities = normalizedEntities;
 
         cacheLayer.set(pluginId, normalizedEntities, this.configCacheMaxAge);
