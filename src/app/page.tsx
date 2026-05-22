@@ -1,11 +1,9 @@
-import { AppShell } from "@/components/layout/AppShell";
-import { DemoAdStrip } from "@/components/ads/DemoAdStrip";
+import { AppClient } from "@/components/layout/AppClient";
 
 export default function Home() {
   return (
     <div className="page-root">
-      <AppShell />
-      <DemoAdStrip />
+      <AppClient />
     </div>
   );
 }

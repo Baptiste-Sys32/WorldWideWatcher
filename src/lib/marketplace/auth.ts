@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { isDemo, isDemoAdmin } from "@/core/edition";
+import { isAuthDisabled, isDemo, isDemoAdmin } from "@/core/edition";
 import { verifyMarketplaceToken } from "./marketplaceToken";
 
 /**
@@ -12,6 +12,8 @@ import { verifyMarketplaceToken } from "./marketplaceToken";
 export async function validateMarketplaceAuth(
     request: Request,
 ): Promise<NextResponse | null> {
+    if (isAuthDisabled) return null;
+
     // 1. Try session auth first
     const session = await auth();
     if (session?.user) {

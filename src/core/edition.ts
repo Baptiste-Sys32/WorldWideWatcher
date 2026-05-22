@@ -62,12 +62,18 @@ const DEMO_ADMIN_SECRET: string | undefined = process.env.WWV_DEMO_ADMIN_SECRET?
 /** True when demo edition has an admin secret configured. */
 export const isDemoAdminConfigured: boolean = isDemo && !!DEMO_ADMIN_SECRET;
 
+/**
+ * Local/dev escape hatch for single-user instances.
+ * Ignored on cloud edition so hosted deployments cannot accidentally become public.
+ */
+export const isAuthDisabled: boolean = !isCloud && process.env.WWV_DISABLE_AUTH === "true";
+
 // ---------------------------------------------------------------------------
 // Feature flags (derived from edition)
 // ---------------------------------------------------------------------------
 
 /** Auth (login / registration) is available on local & cloud, not demo. */
-export const isAuthEnabled: boolean = !isDemo;
+export const isAuthEnabled: boolean = !isDemo && !isAuthDisabled;
 
 /**
  * Plugin install/uninstall is enabled on local & cloud.

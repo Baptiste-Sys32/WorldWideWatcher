@@ -6,6 +6,7 @@ import { authConfig } from "./auth.config";
 
 vi.mock("@/core/edition", () => ({
   isDemo: false,
+  isAuthDisabled: false,
 }));
 
 describe("authConfig", () => {

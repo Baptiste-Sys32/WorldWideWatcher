@@ -39,8 +39,12 @@ export function useBootSequence() {
     });
 
     const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+    const started = useRef(false);
 
     const startBoot = useCallback(() => {
+        if (started.current) return;
+        started.current = true;
+
         // Trigger camera fly-in from deep space via existing preset system
         const t0 = setTimeout(() => {
             dataBus.emit("cameraPreset", { presetId: "global" });
@@ -71,11 +75,25 @@ export function useBootSequence() {
             setState((s) => ({ ...s, phase: "ready" }));
         }, DELAY.done);
 
-        timers.current = [t0, t1, t2, t3, t4, t5, t6];
+        // Development HMR and slow first compiles can interrupt staggered timers.
+        // This guarantees the app cannot stay behind the splash indefinitely.
+        const t7 = setTimeout(() => {
+            setState({
+                phase: "ready",
+                headerReady: true,
+                sidebarReady: true,
+                timelineReady: true,
+                controlsReady: true,
+            });
+        }, DELAY.done + 2_000);
+
+        timers.current = [t0, t1, t2, t3, t4, t5, t6, t7];
     }, []);
 
     const cleanup = useCallback(() => {
         timers.current.forEach(clearTimeout);
+        timers.current = [];
+        started.current = false;
     }, []);
 
     return { ...state, startBoot, cleanup };

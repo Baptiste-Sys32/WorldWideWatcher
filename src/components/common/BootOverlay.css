@@ -13,9 +13,13 @@
 }
 
 .boot-overlay--hidden {
+    visibility: hidden;
     opacity: 0;
     transform: scale(1.04);
     pointer-events: none;
+    transition: opacity 800ms var(--ease-smooth),
+                transform 600ms var(--ease-smooth),
+                visibility 0s linear 800ms;
 }
 
 /* ─── Orbital rings ──────────────────────────────────────── */

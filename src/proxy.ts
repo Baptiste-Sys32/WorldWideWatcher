@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
-import { isDemo } from "@/core/edition";
+import { isAuthDisabled, isDemo } from "@/core/edition";
 
 const workspaceCache = new Map<string, { status: string; expiresAt: number }>();
 const CACHE_TTL = 60_000; // 60 seconds
@@ -55,8 +55,8 @@ export default async function proxy(req: NextRequest) {
         }
     }
 
-    // Demo edition: fully public, no auth required
-    if (isDemo) {
+    // Demo edition or explicit local/dev bypass: fully public, no auth required.
+    if (isDemo || isAuthDisabled) {
         const res = NextResponse.next();
         if (tenantSubdomain) res.headers.set("x-tenant-subdomain", tenantSubdomain);
         return res;

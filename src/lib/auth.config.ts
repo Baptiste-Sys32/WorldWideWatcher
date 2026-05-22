@@ -1,5 +1,5 @@
 import type { NextAuthConfig } from "next-auth";
-import { isDemo } from "@/core/edition";
+import { isAuthDisabled, isDemo } from "@/core/edition";
 
 /**
  * Lightweight auth config for proxy.ts (middleware).
@@ -22,8 +22,8 @@ export const authConfig: NextAuthConfig = {
             // Setup/login pages: always accessible
             if (isSetup || isLogin) return true;
 
-            // Demo edition: all pages accessible (no login required)
-            if (isDemo) return true;
+            // Demo edition or explicit local/dev bypass: all pages accessible.
+            if (isDemo || isAuthDisabled) return true;
 
             // Everything else requires login
             return isLoggedIn;

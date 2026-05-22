@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
+import { isAuthDisabled } from "@/core/edition";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 export async function GET(request: Request) {
+    if (isAuthDisabled) return NextResponse.json([]);
+
     const session = await auth();
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -22,6 +25,15 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+    if (isAuthDisabled) {
+        const body = await request.json();
+        return NextResponse.json({
+            ...body,
+            id: `local-${body.entityId ?? Date.now()}`,
+            lastSeen: new Date().toISOString(),
+        });
+    }
+
     const session = await auth();
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -64,6 +76,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+    if (isAuthDisabled) return NextResponse.json({ success: true });
+
     const session = await auth();
     if (!session?.user?.id) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

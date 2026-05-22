@@ -137,9 +137,9 @@ export function AppShell() {
         const unsubGlobe = dataBus.on("globeReady", () => startBootOnce("globeReady"));
 
         // Safety fallback: if the globe never initialises (e.g. WebGL unavailable
-        // in headless CI environments), force the boot sequence after 20 s so the
+        // in headless CI environments), force the boot sequence after 8 s so the
         // app still reaches the "ready" state and tests are not left hanging.
-        const safetyTimer = setTimeout(() => startBootOnce("safety-timeout"), 20_000);
+        const safetyTimer = setTimeout(() => startBootOnce("safety-timeout"), 8_000);
 
         startPlatform();
 

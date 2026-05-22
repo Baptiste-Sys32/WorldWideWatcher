@@ -1,5 +1,12 @@
 import type { NextConfig } from "next";
 
+const projectRoot = new URL(".", import.meta.url).pathname;
+const allowedDevOrigins = [
+  "127.0.0.1",
+  "localhost",
+  ...(process.env.ALLOWED_DEV_ORIGIN ? [process.env.ALLOWED_DEV_ORIGIN] : []),
+];
+
 const nextConfig: NextConfig = {
   output: "standalone",
   devIndicators: {
@@ -7,7 +14,10 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: ["@prisma/client", "prisma"],
   transpilePackages: ["@worldwideview/wwv-plugin-sdk", "resium", "react-player", "satellite.js", "@worldwideview/wwv-plugin-fortiguard", "@worldwideview/wwv-plugin-nz-traffic-cameras"],
-  allowedDevOrigins: process.env.ALLOWED_DEV_ORIGIN ? [process.env.ALLOWED_DEV_ORIGIN] : undefined,
+  allowedDevOrigins,
+  turbopack: {
+    root: projectRoot,
+  },
   experimental: {
     memoryBasedWorkersCount: true,
     cpus: 2,
