@@ -9,8 +9,15 @@
 import {
     ChevronRight,
     Clock,
+    Funnel,
     Globe2,
+    Info,
+    Layers,
+    Power,
+    RefreshCw,
+    Settings,
 } from "lucide-react";
+import { useState } from "react";
 
 import { PluginIcon } from "@/components/common/PluginIcon";
 import { PluginErrorBoundary } from "@/components/common/PluginErrorBoundary";
@@ -19,6 +26,7 @@ import { dataBus } from "@/core/data/DataBus";
 import { useIsMobile } from "@/core/hooks/useIsMobile";
 import { useResizablePanel } from "@/core/hooks/useResizablePanel";
 import { pluginManager } from "@/core/plugins/PluginManager";
+import type { WorldPlugin } from "@/core/plugins/PluginTypes";
 import { useStore } from "@/core/state/store";
 import { trackEvent } from "@/lib/analytics";
 import {
@@ -43,6 +51,14 @@ const REGIONS = [
 ];
 
 const TIME_WINDOWS = ["1h", "6h", "24h", "48h", "7d"] as const;
+const RIGHT_PANEL_MODES = ["intel", "feeds", "filters", "settings"] as const;
+type RightPanelMode = typeof RIGHT_PANEL_MODES[number];
+const RIGHT_PANEL_MODE_META: Record<RightPanelMode, { label: string; Icon: typeof Info }> = {
+    intel: { label: "Intel", Icon: Info },
+    feeds: { label: "Feeds", Icon: Layers },
+    filters: { label: "Filters", Icon: Funnel },
+    settings: { label: "Settings", Icon: Settings },
+};
 
 /**
  * Formats an arbitrary value into a human-readable string for the inspector table.
@@ -110,6 +126,22 @@ function pollingLabel(pluginId: string) {
     }
 }
 
+function sourceTypeLabel(plugin: WorldPlugin) {
+    const config = plugin.getServerConfig?.();
+    if (config?.transportMode === "websocket") return "Push stream";
+    if (config?.transportMode === "static") return "Static";
+    if (config?.transportMode === "manual") return "Manual";
+    return plugin.getPollingInterval() > 0 ? "Polling" : "Push / manual";
+}
+
+function canRefreshPlugin(plugin: WorldPlugin) {
+    const config = plugin.getServerConfig?.();
+    if (config?.transportMode === "websocket" || config?.transportMode === "static" || config?.transportMode === "manual") {
+        return false;
+    }
+    return plugin.getPollingInterval() > 0;
+}
+
 /**
  * Right-side data inspector panel for entities and layer diagnostics.
  *
@@ -131,6 +163,14 @@ export function DataConfigPanel() {
     const layers = useStore((s) => s.layers);
     const entitiesByPlugin = useStore((s) => s.entitiesByPlugin);
     const sourceHealthByPlugin = useStore((s) => s.sourceHealthByPlugin);
+    const filters = useStore((s) => s.filters);
+    const setFilter = useStore((s) => s.setFilter);
+    const clearFilters = useStore((s) => s.clearFilters);
+    const setHighlightLayerId = useStore((s) => s.setHighlightLayerId);
+    const setSelectedEntity = useStore((s) => s.setSelectedEntity);
+    const setPollingInterval = useStore((s) => s.setPollingInterval);
+    const dataConfig = useStore((s) => s.dataConfig);
+    const [activeMode, setActiveMode] = useState<RightPanelMode>("intel");
 
     const isOpen = isMobile ? openMobilePanel === "right" : configPanelOpen;
     const enabledLayerIds = Object.keys(layers).filter((id) => layers[id]?.enabled);
@@ -146,6 +186,12 @@ export function DataConfigPanel() {
         : Object.values(layers).reduce((total, item) => total + (item.entityCount ?? 0), 0);
     const sourceHealth = pluginId ? sourceHealthByPlugin[pluginId] : undefined;
     const weatherMeta = pluginId ? WEATHER_LAYER_META_BY_ID[pluginId as WeatherLayerId] : undefined;
+    const legend = managed?.plugin.getLegend?.() ?? [];
+    const activePluginFilters = pluginId ? filters[pluginId] ?? {} : {};
+    const activeFilterCount = Object.keys(activePluginFilters).length;
+    const enabledLayers = enabledLayerIds
+        .map((id) => ({ id, managed: pluginManager.getPlugin(id), layer: layers[id], entities: entitiesByPlugin[id] ?? [] }))
+        .filter((item) => item.managed);
 
     const selectedProps = selectedEntity
         ? Object.entries(selectedEntity.properties ?? {}).slice(0, 8)
@@ -192,20 +238,35 @@ export function DataConfigPanel() {
         trackEvent("panel-toggle", { panel: "right", open: false });
     };
 
+    const cycleRightPanelMode = () => {
+        setActiveRightOverlay(null);
+        const index = RIGHT_PANEL_MODES.indexOf(activeMode);
+        setActiveMode(RIGHT_PANEL_MODES[(index + 1) % RIGHT_PANEL_MODES.length]);
+    };
+
+    const modeTitle = RIGHT_PANEL_MODE_META[activeMode].label;
     const title = activeRightOverlay === "map"
         ? "Map"
         : activeRightOverlay === "filters"
             ? "Filters"
-            : selectedEntity?.label || selectedEntity?.id || managed?.plugin.name || "Inspector";
+            : activeMode === "intel"
+                ? selectedEntity?.label || selectedEntity?.id || managed?.plugin.name || "Intel"
+                : modeTitle;
     const subtitle = activeRightOverlay === "map"
         ? "region presets"
         : activeRightOverlay === "filters"
             ? "time frame and data filters"
-            : selectedEntity
-        ? `${managed?.plugin.category ?? selectedEntity.pluginId} entity`
-        : managed
-            ? `${managed.plugin.category} feed`
-            : "local context";
+            : activeMode === "feeds"
+                ? `${enabledLayers.length} enabled feeds`
+                : activeMode === "filters"
+                    ? "time frame and data filters"
+                    : activeMode === "settings"
+                        ? "polling and source status"
+                        : selectedEntity
+                            ? `${managed?.plugin.category ?? selectedEntity.pluginId} entity`
+                            : managed
+                                ? `${managed.plugin.category} feed`
+                                : "local context";
 
     const renderOverlay = () => {
         if (activeRightOverlay === "map") {
@@ -270,6 +331,152 @@ export function DataConfigPanel() {
         return null;
     };
 
+    const renderFeedsMode = () => (
+      <div className="config-panel__content">
+        {enabledLayers.length === 0 ? (
+          <section className="status-card status-card--info">
+            <span className="status-card__title">Feeds</span>
+            <span className="status-card__text">No feeds are enabled.</span>
+          </section>
+        ) : enabledLayers.map(({ id, managed: itemManaged, layer: itemLayer, entities }) => {
+            if (!itemManaged) return null;
+            const itemHealth = sourceHealthByPlugin[id];
+            const refreshable = canRefreshPlugin(itemManaged.plugin);
+            return (
+              <section key={id} className="inspector-card">
+                <div className="feed-legend-card__header">
+                  <div className="inspector-card__title">
+                    <PluginIcon icon={itemManaged.plugin.icon} size={15} />
+                    <span>{itemManaged.plugin.name}</span>
+                  </div>
+                  <div className="feed-row-actions">
+                    <button
+                      type="button"
+                      className="feed-legend-card__clear"
+                      onClick={() => {
+                          setSelectedEntity(null);
+                          setHighlightLayerId(id);
+                          setActiveMode("intel");
+                      }}
+                    >
+                      Info
+                    </button>
+                    <button
+                      type="button"
+                      className="feed-legend-card__clear"
+                      disabled={!refreshable}
+                      title={refreshable ? "Refresh feed" : "Push/manual feed"}
+                      aria-label={refreshable ? "Refresh feed" : "Push/manual feed"}
+                      onClick={() => {
+                          void pluginManager.fetchForPlugin(id, useStore.getState().timeRange);
+                          trackEvent("feed-refresh", { plugin: id, surface: "right-panel" });
+                      }}
+                    >
+                      <RefreshCw size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      className="feed-legend-card__clear"
+                      onClick={() => pluginManager.disablePlugin(id)}
+                      title="Disable feed"
+                      aria-label="Disable feed"
+                    >
+                      <Power size={13} />
+                    </button>
+                  </div>
+                </div>
+                <table className="kv-table">
+                  <tbody>
+                    <tr><td>Entities</td><td>{(entities.length || itemLayer?.entityCount || 0).toLocaleString()}</td></tr>
+                    <tr><td>Health</td><td>{itemHealth?.status ?? (itemLayer?.loading ? "loading" : "idle")}</td></tr>
+                    <tr><td>Source</td><td>{sourceTypeLabel(itemManaged.plugin)}</td></tr>
+                    <tr><td>Polling</td><td>{pollingLabel(id)}</td></tr>
+                  </tbody>
+                </table>
+              </section>
+            );
+        })}
+      </div>
+    );
+
+    const renderFiltersMode = () => (
+      <div className="config-panel__content">
+        <section className="inspector-card">
+          <div className="inspector-card__title">Time Frame</div>
+          <div className="time-window-grid">
+            {TIME_WINDOWS.map((tw) => (
+              <button
+                type="button"
+                key={tw}
+                className={`time-window-btn ${timeWindow === tw ? "time-window-btn--active" : ""}`}
+                onClick={() => {
+                    setTimeWindow(tw);
+                    const range = useStore.getState().timeRange;
+                    pluginManager.updateTimeRange(range);
+                    trackEvent("time-window-change", { window: tw });
+                }}
+              >
+                <Clock size={14} />
+                <span>{tw}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+        <section className="inspector-card">
+          <div className="inspector-card__title">Entity Filters</div>
+          <FilterSection />
+        </section>
+      </div>
+    );
+
+    const renderSettingsMode = () => (
+      <div className="config-panel__content">
+        <section className="inspector-card">
+          <div className="inspector-card__title">Cache</div>
+          <table className="kv-table">
+            <tbody>
+              <tr><td>Enabled</td><td>{dataConfig.cacheEnabled ? "Yes" : "No"}</td></tr>
+              <tr><td>Max age</td><td>{Math.round(dataConfig.cacheMaxAge / 60000).toLocaleString()} min</td></tr>
+              <tr><td>Retries</td><td>{dataConfig.retryAttempts.toLocaleString()}</td></tr>
+            </tbody>
+          </table>
+        </section>
+        {enabledLayers.map(({ id, managed: itemManaged }) => itemManaged ? (
+          <section key={id} className="inspector-card">
+            <div className="inspector-card__title">{itemManaged.plugin.name}</div>
+            <table className="kv-table">
+              <tbody>
+                <tr><td>Source</td><td>{sourceTypeLabel(itemManaged.plugin)}</td></tr>
+                <tr><td>Health</td><td>{sourceHealthByPlugin[id]?.status ?? "idle"}</td></tr>
+              </tbody>
+            </table>
+            <label className="polling-setting-row">
+              <span>Polling seconds</span>
+              <input
+                type="number"
+                min={0}
+                step={5}
+                value={Math.round((dataConfig.pollingIntervals[id] ?? itemManaged.plugin.getPollingInterval()) / 1000)}
+                onChange={(event) => setPollingInterval(id, Math.max(0, Number(event.target.value) || 0) * 1000)}
+              />
+            </label>
+            {sourceHealthByPlugin[id]?.sources?.length ? (
+              <table className="kv-table">
+                <tbody>
+                  {sourceHealthByPlugin[id].sources?.map((source) => (
+                    <tr key={`${id}-${source.scope}-${source.sourceName}`}>
+                      <td>{source.sourceName}</td>
+                      <td>{source.ok ? "ok" : source.errorMessage ?? "error"} · {source.scope} · {source.count.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : null}
+          </section>
+        ) : null)}
+      </div>
+    );
+
     return (
       <aside
         className={`sidebar sidebar--right glass-panel oled-inspector ${isMobile ? "sidebar--mobile" : ""} ${isOpen ? "" : "sidebar--closed"}`}
@@ -285,11 +492,27 @@ export function DataConfigPanel() {
 
         <div className="panel-header config-panel__header">
           <div className="inspector-heading">
-            {managed && (
-              <span className="inspector-heading__icon">
-                <PluginIcon icon={managed.plugin.icon} size={18} />
-              </span>
-            )}
+            <div className="panel-mode-cycler" aria-label="Inspector panel mode">
+              <button
+                type="button"
+                className="panel-mode-button"
+                onClick={cycleRightPanelMode}
+                title={`Current: ${modeTitle}. Click to cycle panel mode.`}
+                aria-label={`Current panel mode: ${modeTitle}. Click to cycle.`}
+              >
+                {activeMode === "intel" && managed
+                    ? <PluginIcon icon={managed.plugin.icon} size={15} />
+                    : (() => {
+                        const { Icon } = RIGHT_PANEL_MODE_META[activeMode];
+                        return <Icon size={15} />;
+                    })()}
+              </button>
+              <div className="panel-mode-dots" aria-hidden="true">
+                {RIGHT_PANEL_MODES.map((mode) => (
+                  <span key={mode} className={`panel-mode-dot ${activeMode === mode ? "panel-mode-dot--active" : ""}`} />
+                ))}
+              </div>
+            </div>
             <div className="inspector-heading__text">
               <div className="config-panel__title">{title}</div>
               <div className="config-panel__subtitle">{subtitle}</div>
@@ -306,7 +529,7 @@ export function DataConfigPanel() {
           </button>
         </div>
 
-        {activeRightOverlay ? renderOverlay() : (
+        {activeRightOverlay ? renderOverlay() : activeMode === "feeds" ? renderFeedsMode() : activeMode === "filters" ? renderFiltersMode() : activeMode === "settings" ? renderSettingsMode() : (
         <div className="config-panel__content">
           <section className={`status-card status-card--${statusTone}`}>
             <span className="status-card__title">{statusTitle}</span>
@@ -337,6 +560,58 @@ export function DataConfigPanel() {
             <section className="inspector-card">
               <div className="inspector-card__title">Feed</div>
               <p>{managed.plugin.description}</p>
+            </section>
+          )}
+
+          {pluginId && legend.length > 0 && !selectedEntity && (
+            <section className="inspector-card feed-legend-card">
+              <div className="feed-legend-card__header">
+                <div className="inspector-card__title">Data Point Colors</div>
+                {activeFilterCount > 0 && (
+                  <button
+                    type="button"
+                    className="feed-legend-card__clear"
+                    onClick={() => {
+                        clearFilters(pluginId);
+                        trackEvent("filter-clear", { plugin: pluginId, surface: "inspector-legend" });
+                    }}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div className="feed-legend-list">
+                {legend.map((item) => {
+                    const activeLegendFilter = item.filterId ? activePluginFilters[item.filterId] : undefined;
+                    const filterActive = Boolean(item.filterValue
+                        && activeLegendFilter?.type === "select"
+                        && activeLegendFilter.values.includes(item.filterValue));
+                    return (
+                      <button
+                        key={`${item.label}-${item.color}`}
+                        type="button"
+                        className={`feed-legend-row ${filterActive ? "feed-legend-row--active" : ""}`}
+                        onClick={() => {
+                            if (!item.filterId || !item.filterValue) return;
+                            setFilter(pluginId, item.filterId, { type: "select", values: [item.filterValue] });
+                            trackEvent("filter-change", { plugin: pluginId, filter: item.filterId, surface: "inspector-legend" });
+                        }}
+                      >
+                        <span className="feed-legend-row__bar" style={{ background: item.color }} />
+                        <span className="feed-legend-row__dot" style={{ background: item.color }} />
+                        <span className="feed-legend-row__text">
+                          <span>{item.label}</span>
+                          <span>{item.color.toUpperCase()}</span>
+                        </span>
+                        {item.filterId && (
+                          <span className="feed-legend-row__filter" title={`Filter to ${item.label}`}>
+                            <Funnel size={13} />
+                          </span>
+                        )}
+                      </button>
+                    );
+                })}
+              </div>
             </section>
           )}
 
