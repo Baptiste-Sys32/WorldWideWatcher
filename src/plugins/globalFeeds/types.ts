@@ -11,6 +11,7 @@ export type GlobalFeedId =
     | "air-quality"
     | "marine-buoys"
     | "satellites"
+    | "gps-jamming"
     | "us-weather-alerts";
 
 export const BUILT_IN_GLOBAL_FEED_IDS = [
@@ -22,6 +23,7 @@ export const BUILT_IN_GLOBAL_FEED_IDS = [
     "air-quality",
     "marine-buoys",
     "satellites",
+    "gps-jamming",
     "us-weather-alerts",
 ] as const satisfies readonly GlobalFeedId[];
 
@@ -32,7 +34,7 @@ export interface SourceMeta {
 
 export interface FeedSourceAudit {
     sourceName: string;
-    scope: SourceScope;
+    scope: SourceScope | string;
     ok: boolean;
     count: number;
     errorMessage?: string;

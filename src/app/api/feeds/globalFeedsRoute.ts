@@ -7,6 +7,7 @@ import {
     normalizeCelestrakSatellites,
     normalizeEonetWildfires,
     normalizeFirmsCsv,
+    normalizeGpsJamming,
     normalizeMeteoFranceAlerts,
     normalizeNdbcLatest,
     normalizeNwsAlerts,
@@ -28,7 +29,11 @@ import type {
 
 export const FEED_REVALIDATE_SECONDS = 300;
 
-type Adapter = () => Promise<FeedEntity[]>;
+type AdapterResult = FeedEntity[] | {
+    items: FeedEntity[];
+    sources?: FeedSourceAudit[];
+};
+type Adapter = () => Promise<AdapterResult>;
 
 interface AdapterConfig {
     sourceName: string;
@@ -49,6 +54,8 @@ const ENDPOINTS = {
     celestrakStations: "https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=json",
     celestrakWeather: "https://celestrak.org/NORAD/elements/gp.php?GROUP=weather&FORMAT=json",
     celestrakStarlink: "https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=json",
+    celestrakStarlinkTle: "https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=tle",
+    gpsJamming: process.env.GPS_JAMMING_FEED_URL ?? "https://dataenginev2.worldwideview.dev/api/gps-jamming",
     nwsAlerts: "https://api.weather.gov/alerts/active",
     meteoFranceVigilance: "https://vigilance.meteofrance.fr/data/NXFR34_LFPW_.json",
     vigicruesStations: "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?size=1000&en_service=true",
@@ -126,38 +133,59 @@ function parseNdbcStationsXml(xml: string): Record<string, { name?: string; lati
     return stations;
 }
 
+function parseTleText(text: string): unknown[] {
+    const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const records: unknown[] = [];
+    for (let index = 0; index < lines.length - 1; index++) {
+        const maybeName = lines[index];
+        const line1 = lines[index + 1];
+        const line2 = lines[index + 2];
+        if (!line1?.startsWith("1 ") || !line2?.startsWith("2 ")) continue;
+        records.push({
+            OBJECT_NAME: maybeName,
+            NORAD_CAT_ID: line1.slice(2, 7).trim(),
+            TLE_LINE1: line1,
+            TLE_LINE2: line2,
+        });
+        index += 2;
+    }
+    return records;
+}
+
 /**
  * Executes a feed adapter while capturing audit diagnostics.
  *
  * @param config - Adapter metadata including source name and scope.
  * @returns Adapter results and an audit summary.
  */
-async function runAdapterWithAudit(config: AdapterConfig): Promise<{ items: FeedEntity[]; audit: FeedSourceAudit }> {
+async function runAdapterWithAudit(config: AdapterConfig): Promise<{ items: FeedEntity[]; audits: FeedSourceAudit[] }> {
     const started = Date.now();
     try {
-        const items = await config.adapter();
+        const result = await config.adapter();
+        const items = Array.isArray(result) ? result : result.items;
+        const sources = Array.isArray(result) ? undefined : result.sources;
         return {
             items,
-            audit: {
+            audits: sources ?? [{
                 sourceName: config.sourceName,
                 scope: config.scope,
                 ok: true,
                 count: items.length,
                 latencyMs: Math.max(0, Date.now() - started),
-            },
+            }],
         };
     } catch (error) {
         console.warn(`[GlobalFeeds:${config.sourceName}] adapter failed`, error);
         return {
             items: [],
-            audit: {
+            audits: [{
                 sourceName: config.sourceName,
                 scope: config.scope,
                 ok: false,
                 count: 0,
                 errorMessage: sanitizeHealthMessage(error instanceof Error ? error.message : String(error)) ?? "Adapter failed",
                 latencyMs: Math.max(0, Date.now() - started),
-            },
+            }],
         };
     }
 }
@@ -269,13 +297,92 @@ export async function fetchMarineBuoys(): Promise<FeedEntity[]> {
     return normalizeNdbcLatest(text, parseNdbcStationsXml(stationXml));
 }
 
-export async function fetchSatellites(): Promise<FeedEntity[]> {
+async function fetchCelestrakGroup(
+    group: "stations" | "weather" | "starlink",
+    url: string,
+    fallbackTleUrl?: string,
+): Promise<{ items: FeedEntity[]; audit: FeedSourceAudit }> {
+    const started = Date.now();
+    const normalizeGroupData = (data: unknown) => normalizeCelestrakSatellites(data, group);
+    try {
+        const data = await fetchJson(url);
+        let items = normalizeGroupData(data);
+        if (items.length === 0 && fallbackTleUrl) {
+            items = normalizeGroupData(parseTleText(await fetchText(fallbackTleUrl)));
+        }
+        if (items.length === 0) {
+            return {
+                items,
+                audit: {
+                    sourceName: `CelesTrak ${group}`,
+                    scope: group,
+                    ok: false,
+                    count: 0,
+                    errorMessage: "CelesTrak group returned no usable items",
+                    latencyMs: Math.max(0, Date.now() - started),
+                },
+            };
+        }
+        return {
+            items,
+            audit: {
+                sourceName: `CelesTrak ${group}`,
+                scope: group,
+                ok: true,
+                count: items.length,
+                latencyMs: Math.max(0, Date.now() - started),
+            },
+        };
+    } catch (error) {
+        if (fallbackTleUrl) {
+            try {
+                const items = normalizeGroupData(parseTleText(await fetchText(fallbackTleUrl)));
+                if (items.length > 0) {
+                    return {
+                        items,
+                        audit: {
+                            sourceName: `CelesTrak ${group}`,
+                            scope: group,
+                            ok: true,
+                            count: items.length,
+                            errorMessage: sanitizeHealthMessage(error instanceof Error ? `JSON failed; TLE fallback used (${error.message})` : "JSON failed; TLE fallback used") ?? "TLE fallback used",
+                            latencyMs: Math.max(0, Date.now() - started),
+                        },
+                    };
+                }
+            } catch {
+                // Report the original JSON error below; both Starlink sources failed.
+            }
+        }
+        return {
+            items: [],
+            audit: {
+                sourceName: `CelesTrak ${group}`,
+                scope: group,
+                ok: false,
+                count: 0,
+                errorMessage: sanitizeHealthMessage(error instanceof Error ? error.message : String(error)) ?? "CelesTrak group failed",
+                latencyMs: Math.max(0, Date.now() - started),
+            },
+        };
+    }
+}
+
+export async function fetchSatellites(): Promise<{ items: FeedEntity[]; sources: FeedSourceAudit[] }> {
     const groups = await Promise.all([
-        fetchJson(ENDPOINTS.celestrakStations).then((data) => normalizeCelestrakSatellites(data, "stations")),
-        fetchJson(ENDPOINTS.celestrakWeather).then((data) => normalizeCelestrakSatellites(data, "weather")),
-        fetchJson(ENDPOINTS.celestrakStarlink).then((data) => normalizeCelestrakSatellites(data, "starlink")),
+        fetchCelestrakGroup("stations", ENDPOINTS.celestrakStations),
+        fetchCelestrakGroup("weather", ENDPOINTS.celestrakWeather),
+        fetchCelestrakGroup("starlink", ENDPOINTS.celestrakStarlink, ENDPOINTS.celestrakStarlinkTle),
     ]);
-    return groups.flat();
+    return {
+        items: groups.flatMap((group) => group.items),
+        sources: groups.map((group) => group.audit),
+    };
+}
+
+export async function fetchGpsJamming(): Promise<FeedEntity[]> {
+    const data = await fetchJson(ENDPOINTS.gpsJamming);
+    return normalizeGpsJamming(data);
 }
 
 export async function fetchUsWeatherAlerts(): Promise<FeedEntity[]> {
@@ -380,6 +487,18 @@ const ADAPTERS: Record<GlobalFeedId, { global: AdapterConfig; france: AdapterCon
             adapter: async () => [],
         },
     },
+    "gps-jamming": {
+        global: {
+            sourceName: "GPSJam / WorldWideView data engine",
+            scope: "global",
+            adapter: fetchGpsJamming,
+        },
+        france: {
+            sourceName: "France scoped fallback",
+            scope: "france",
+            adapter: async () => [],
+        },
+    },
     "us-weather-alerts": {
         global: {
             sourceName: "NOAA/NWS",
@@ -408,6 +527,6 @@ export async function feedResponse(feedId: GlobalFeedId): Promise<NextResponse<F
     ]);
     return NextResponse.json({
         items: mergeAndDedupeEntities(globalResult.items, franceResult.items),
-        sources: [globalResult.audit, franceResult.audit],
+        sources: [...globalResult.audits, ...franceResult.audits],
     });
 }

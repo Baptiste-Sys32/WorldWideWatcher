@@ -1,4 +1,6 @@
-import { gstime, propagate, twoline2satrec, eciToGeodetic } from "satellite.js";
+import {
+    gstime, propagate, twoline2satrec, eciToGeodetic, json2satrec
+} from "satellite.js";
 import type { GeoEntity } from "@/core/plugins/PluginTypes";
 import type { FeedEntity, GlobalFeedId, SourceMeta } from "./types";
 
@@ -445,7 +447,7 @@ export function normalizeEonetWildfires(data: unknown): FeedEntity[] {
 }
 
 export function normalizeOpenAqLatest(data: unknown): FeedEntity[] {
-    return toArray(data).flatMap((raw, index) => {
+    return toArray(data).flatMap((raw) => {
         if (!isRecord(raw)) return [];
         const coords = pickCoordinates(raw.coordinates && isRecord(raw.coordinates) ? raw.coordinates : raw);
         const measurements = Array.isArray(raw.measurements) ? raw.measurements : [];
@@ -560,14 +562,16 @@ export function normalizeCelestrakSatellites(data: unknown, group = "active", no
         const line1 = stringFrom(raw.TLE_LINE1 ?? raw.line1);
         const line2 = stringFrom(raw.TLE_LINE2 ?? raw.line2);
         const name = stringFrom(raw.OBJECT_NAME ?? raw.name ?? raw.OBJECT_ID) ?? `Satellite ${index + 1}`;
-        if (!line1 || !line2) return [];
         try {
-            const satrec = twoline2satrec(line1, line2);
+            const satrec = line1 && line2
+                ? twoline2satrec(line1, line2)
+                : json2satrec(raw as Parameters<typeof json2satrec>[0]);
             const positionAndVelocity = propagate(satrec, now);
             if (!positionAndVelocity?.position || typeof positionAndVelocity.position === "boolean") return [];
             const geodetic = eciToGeodetic(positionAndVelocity.position, gstime(now));
+            const noradId = stringFrom(raw.NORAD_CAT_ID ?? raw.noradId ?? satrec.satnum);
             return [{
-                id: `satellites-global-${slug(stringFrom(raw.NORAD_CAT_ID) ?? name)}`,
+                id: `satellites-global-${slug(noradId ?? name)}`,
                 pluginId: "satellites",
                 latitude: geodetic.latitude * 180 / Math.PI,
                 longitude: geodetic.longitude * 180 / Math.PI,
@@ -580,7 +584,7 @@ export function normalizeCelestrakSatellites(data: unknown, group = "active", no
                     sourceName: "CelesTrak",
                     eventType: "satellite",
                     orbitGroup: group,
-                    noradId: stringFrom(raw.NORAD_CAT_ID),
+                    noradId,
                     active: boolish(raw.OPS_STATUS_CODE) || group === "active",
                     severity: group,
                 },
@@ -588,6 +592,36 @@ export function normalizeCelestrakSatellites(data: unknown, group = "active", no
         } catch {
             return [];
         }
+    });
+}
+
+export function normalizeGpsJamming(data: unknown): FeedEntity[] {
+    return toArray(data).flatMap((raw, index) => {
+        if (!isRecord(raw)) return [];
+        const latitude = numberFrom(raw.lat ?? raw.latitude);
+        const longitude = numberFrom(raw.lon ?? raw.lng ?? raw.longitude);
+        if (latitude === undefined || longitude === undefined) return [];
+        const level = stringFrom(raw.interferenceLevel ?? raw.level ?? raw.severity) ?? "unknown";
+        const timestamp = dateFrom(raw.timestamp ?? raw.time ?? raw.updated);
+        const id = stringFrom(raw.id) ?? `${latitude.toFixed(3)}-${longitude.toFixed(3)}-${index}`;
+        const region = stringFrom(raw.region ?? raw.area ?? raw.location);
+        return [{
+            id: `gps-jamming-global-${slug(id)}`,
+            pluginId: "gps-jamming",
+            latitude,
+            longitude,
+            timestamp,
+            label: region ? `${region} GPS interference` : `${level} GPS interference`,
+            properties: {
+                ...raw,
+                sourceScope: "global" as const,
+                sourceName: stringFrom(data && isRecord(data) ? data.source : undefined) ?? "GPSJam",
+                eventType: "gps-jamming",
+                interferenceLevel: level.toLowerCase(),
+                region,
+                severity: level.toLowerCase(),
+            },
+        }];
     });
 }
 

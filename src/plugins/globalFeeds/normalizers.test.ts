@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
     mergeAndDedupeEntities,
+    normalizeCelestrakSatellites,
     normalizeFirmsCsv,
     normalizeGdacsEvents,
+    normalizeGpsJamming,
     normalizeMeteoFranceAlerts,
     normalizeNdbcLatest,
     normalizeNwsAlerts,
@@ -53,6 +55,69 @@ describe("global feed normalizers", () => {
             pluginId: "flood-alerts",
             properties: { sourceScope: "global", sourceName: "GDACS", country: "Italy" },
         });
+    });
+
+    it("normalizes CelesTrak GP JSON orbital elements", () => {
+        const items = normalizeCelestrakSatellites([{
+            OBJECT_NAME: "ISS (ZARYA)",
+            OBJECT_ID: "1998-067A",
+            EPOCH: "2026-05-22T12:28:18.496128",
+            MEAN_MOTION: 15.49313075,
+            ECCENTRICITY: 0.0007537,
+            INCLINATION: 51.633,
+            RA_OF_ASC_NODE: 67.1668,
+            ARG_OF_PERICENTER: 86.3178,
+            MEAN_ANOMALY: 273.8672,
+            EPHEMERIS_TYPE: 0,
+            CLASSIFICATION_TYPE: "U",
+            NORAD_CAT_ID: 25544,
+            ELEMENT_SET_NO: 999,
+            REV_AT_EPOCH: 56777,
+            BSTAR: 0.00013945,
+            MEAN_MOTION_DOT: 0.00007327,
+            MEAN_MOTION_DDOT: 0,
+        }], "stations", new Date("2026-05-23T10:00:00.000Z"));
+
+        expect(items).toHaveLength(1);
+        expect(items[0]).toMatchObject({
+            pluginId: "satellites",
+            label: "ISS (ZARYA)",
+            properties: {
+                sourceName: "CelesTrak",
+                orbitGroup: "stations",
+                noradId: "25544",
+            },
+        });
+        expect(Number.isFinite(items[0].latitude)).toBe(true);
+        expect(Number.isFinite(items[0].longitude)).toBe(true);
+        expect((items[0].altitude ?? 0) > 100_000).toBe(true);
+    });
+
+    it("normalizes GPS jamming engine items", () => {
+        const items = normalizeGpsJamming({
+            source: "gpsjam_mock",
+            items: [{
+                id: "jam-1",
+                lat: 47.42,
+                lon: 36.26,
+                interferenceLevel: "high",
+                timestamp: "2026-05-23T00:00:00.000Z",
+                region: "Eastern Europe / Ukraine",
+            }],
+        });
+
+        expect(items).toEqual([
+            expect.objectContaining({
+                pluginId: "gps-jamming",
+                latitude: 47.42,
+                longitude: 36.26,
+                properties: expect.objectContaining({
+                    sourceName: "gpsjam_mock",
+                    interferenceLevel: "high",
+                    region: "Eastern Europe / Ukraine",
+                }),
+            }),
+        ]);
     });
 
     it("dedupes global France-adjacent events when a France item is equivalent", () => {

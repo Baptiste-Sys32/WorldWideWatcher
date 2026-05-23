@@ -40,6 +40,22 @@ describe("createGlobalFeedPlugin", () => {
         expect(createGlobalFeedPlugin("air-quality").category).toBe("weather");
         expect(createGlobalFeedPlugin("marine-buoys").category).toBe("maritime");
         expect(createGlobalFeedPlugin("satellites").category).toBe("space");
+        expect(createGlobalFeedPlugin("gps-jamming").category).toBe("space");
         expect(createGlobalFeedPlugin("us-weather-alerts").category).toBe("weather");
+    });
+
+    it("exposes category legends and filters for space feeds", () => {
+        const satellites = createGlobalFeedPlugin("satellites");
+        const gpsJamming = createGlobalFeedPlugin("gps-jamming");
+
+        expect(satellites.getLegend?.().map((item) => item.label)).toContain("Space Stations");
+        expect(satellites.getFilterDefinitions?.()).toEqual([
+            expect.objectContaining({ id: "orbit-group", propertyKey: "orbitGroup" }),
+        ]);
+        expect(gpsJamming.getLegend?.().map((item) => item.label)).toContain("High");
+        expect(gpsJamming.getFilterDefinitions?.()).toEqual([
+            expect.objectContaining({ id: "interference-level", propertyKey: "interferenceLevel" }),
+            expect.objectContaining({ id: "region", propertyKey: "region" }),
+        ]);
     });
 });

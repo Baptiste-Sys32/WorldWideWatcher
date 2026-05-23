@@ -136,4 +136,86 @@ describe("global feed API route", () => {
             expect.objectContaining({ scope: "france", ok: true, count: 0 }),
         ]);
     });
+
+    it("returns satellite items from successful CelesTrak groups when another group is rate limited", async () => {
+        vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+            if (url.includes("GROUP=starlink") && url.includes("FORMAT=tle")) {
+                return {
+                    ok: true,
+                    status: 200,
+                    headers: new Headers({ "content-type": "text/plain" }),
+                    text: async () => [
+                        "STARLINK-1",
+                        "1 44235U 19029A   26143.50000000  .00002000  00000+0  10000-3 0  9991",
+                        "2 44235  53.0000  67.1668 0001000  86.3178 273.8672 15.05500000 12345",
+                    ].join("\n"),
+                    json: async () => ({}),
+                };
+            }
+            if (url.includes("GROUP=starlink")) return jsonResponse("not updated", false, 403);
+            return jsonResponse([{
+                OBJECT_NAME: "ISS (ZARYA)",
+                OBJECT_ID: "1998-067A",
+                EPOCH: "2026-05-22T12:28:18.496128",
+                MEAN_MOTION: 15.49313075,
+                ECCENTRICITY: 0.0007537,
+                INCLINATION: 51.633,
+                RA_OF_ASC_NODE: 67.1668,
+                ARG_OF_PERICENTER: 86.3178,
+                MEAN_ANOMALY: 273.8672,
+                EPHEMERIS_TYPE: 0,
+                CLASSIFICATION_TYPE: "U",
+                NORAD_CAT_ID: 25544,
+                ELEMENT_SET_NO: 999,
+                REV_AT_EPOCH: 56777,
+                BSTAR: 0.00013945,
+                MEAN_MOTION_DOT: 0.00007327,
+                MEAN_MOTION_DDOT: 0,
+            }]);
+        }));
+
+        const response = await feedResponse("satellites");
+        const json = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(json.items.length).toBeGreaterThan(0);
+        expect(json.items[0]).toEqual(expect.objectContaining({
+            pluginId: "satellites",
+            properties: expect.objectContaining({ sourceName: "CelesTrak" }),
+        }));
+        expect(json.items).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                properties: expect.objectContaining({ orbitGroup: "starlink" }),
+            }),
+        ]));
+        expect(json.sources).toEqual(expect.arrayContaining([
+            expect.objectContaining({ sourceName: "CelesTrak stations", scope: "stations", ok: true }),
+            expect.objectContaining({ sourceName: "CelesTrak weather", scope: "weather", ok: true }),
+            expect.objectContaining({ sourceName: "CelesTrak starlink", scope: "starlink", ok: true }),
+        ]));
+    });
+
+    it("returns GPS jamming feed items", async () => {
+        vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
+            source: "gpsjam_mock",
+            items: [{
+                id: "jam-1",
+                lat: 47.42,
+                lon: 36.26,
+                interferenceLevel: "high",
+                timestamp: "2026-05-23T00:00:00.000Z",
+                region: "Eastern Europe / Ukraine",
+            }],
+        })));
+
+        const response = await feedResponse("gps-jamming");
+        const json = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(json.items).toHaveLength(1);
+        expect(json.items[0]).toEqual(expect.objectContaining({
+            pluginId: "gps-jamming",
+            properties: expect.objectContaining({ interferenceLevel: "high" }),
+        }));
+    });
 });
