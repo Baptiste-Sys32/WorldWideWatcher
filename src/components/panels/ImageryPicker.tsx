@@ -12,7 +12,7 @@ import React from "react";
 import { useStore } from "@/core/state/store";
 import { IMAGERY_LAYERS } from "@/core/globe/ImageryProviderFactory";
 import {
- Globe, Grid2X2, Layout, Layers
+ Box, Globe, Grid2X2, Layout
 } from "lucide-react";
 import { trackEvent } from "@/lib/analytics";
 
@@ -78,13 +78,26 @@ export function ImageryPicker() {
                             key={layer.id}
                             className={className}
                             onClick={() => {
-                                    updateMapConfig({ baseLayerId: layer.id, fallbackLayerId: null });
+                                    updateMapConfig({
+                                        baseLayerId: layer.id,
+                                        fallbackLayerId: null,
+                                        ...(layer.type === "osm-3d" ? { sceneMode: 3 as const } : {}),
+                                    });
                                     trackEvent("imagery-layer-change", { layer: layer.id });
                                 }}
                             title={isFailedTarget ? "Error: Missing API Key" : (isThisFallback ? "Active Fallback" : "")}
                           >
                             <div className="imagery-item__thumbnail">
-                              <Layers size={20} className="imagery-item__icon" />
+                              {layer.thumbnail ? (
+                                <img src={layer.thumbnail} alt="" loading="lazy" />
+                              ) : (
+                                <Box size={20} className="imagery-item__icon" />
+                              )}
+                              {layer.type !== "imagery" && (
+                                <span className="imagery-item__badge">
+                                  <Box size={12} />
+                                </span>
+                              )}
                             </div>
                             <div className="imagery-item__name">{layer.name}</div>
                           </div>

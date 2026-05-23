@@ -7,10 +7,15 @@ import {
     Cesium3DTileset,
     Cesium3DTileStyle,
     UrlTemplateImageryProvider,
+    Cartographic,
+    Cartesian3,
+    Matrix4,
     createOsmBuildingsAsync
 } from "cesium";
 import { useStore } from "@/core/state/store";
 import { createImageryProvider, createOsmProvider } from "./ImageryProviderFactory";
+
+const OSM_BUILDINGS_HEIGHT_OFFSET_METERS = -180;
 
 export function useImageryManager(viewerInstance: CesiumViewer | null, viewerReady: boolean) {
     const viewer = viewerInstance;
@@ -22,11 +27,22 @@ export function useImageryManager(viewerInstance: CesiumViewer | null, viewerRea
 
     // Resolve runtime truth:
     const activeLayerId = fallbackLayerId || baseLayerId;
+    const isGoogle3D = activeLayerId === "google-3d";
+    const isOsm3D = activeLayerId === "osm-3d";
+    const is3DMode = sceneMode === 3;
 
     const currentImageryLayerRef = useRef<ImageryLayer | null>(null);
     // const googleTilesetRef = useRef<Cesium3DTileset | null>(null);
     const osmBuildingsRef = useRef<Cesium3DTileset | null>(null);
     const weatherLayerRef = useRef<ImageryLayer | null>(null);
+
+    function setTilesetHeightOffset(tileset: Cesium3DTileset, heightOffsetMeters: number) {
+        const cartographic = Cartographic.fromCartesian(tileset.boundingSphere.center);
+        const surface = Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, 0);
+        const offset = Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, heightOffsetMeters);
+        const translation = Cartesian3.subtract(offset, surface, new Cartesian3());
+        tileset.modelMatrix = Matrix4.fromTranslation(translation);
+    }
 
     // 1. Manage Scene Mode (2D / 3D / Columbus)
     useEffect(() => {
@@ -51,8 +67,6 @@ export function useImageryManager(viewerInstance: CesiumViewer | null, viewerRea
             if (!viewer || !viewerReady || viewer.isDestroyed()) return;
 
             // Handle Google 3D Tiles specifically
-            const isGoogle3D = activeLayerId === "google-3d";
-
             // Toggle Google 3D Tileset visibility if it exists
             // Or find it in primitives
             const {primitives} = viewer.scene;
@@ -116,12 +130,10 @@ export function useImageryManager(viewerInstance: CesiumViewer | null, viewerRea
     }, [viewer, viewerReady, baseLayerId, fallbackLayerId]);
 
     // 3. Manage OSM 3D Buildings (only in 3D mode, not with Google Photorealistic tiles)
-    const isGoogle3D = activeLayerId === "google-3d";
-    const is3DMode = sceneMode === 3;
     useEffect(() => {
         if (!viewer || !viewerReady || viewer.isDestroyed()) return;
 
-        const shouldShow = showOsmBuildings && !isGoogle3D && is3DMode;
+        const shouldShow = (showOsmBuildings || isOsm3D) && !isGoogle3D && is3DMode;
 
         if (shouldShow && !osmBuildingsRef.current) {
             let cancelled = false;
@@ -132,6 +144,7 @@ export function useImageryManager(viewerInstance: CesiumViewer | null, viewerRea
                 }
                 (tileset as any)._wwvOsmBuildings = true;
                 tileset.maximumScreenSpaceError = 16;
+                setTilesetHeightOffset(tileset, OSM_BUILDINGS_HEIGHT_OFFSET_METERS);
                 tileset.style = new Cesium3DTileStyle({
                     color: "color('#E0DDD5')",
                 });
@@ -149,7 +162,7 @@ export function useImageryManager(viewerInstance: CesiumViewer | null, viewerRea
             }
             osmBuildingsRef.current = null;
         }
-    }, [viewer, viewerReady, isGoogle3D, is3DMode, showOsmBuildings]);
+    }, [viewer, viewerReady, isGoogle3D, isOsm3D, is3DMode, showOsmBuildings]);
 
     // 4. Manage Weather Overlay (semi-transparent tile layer above base imagery)
     useEffect(() => {
@@ -165,8 +178,11 @@ export function useImageryManager(viewerInstance: CesiumViewer | null, viewerRea
         try {
             const provider = new UrlTemplateImageryProvider({
                 url: `/api/weather/tile/{z}/{x}/{y}?layer=${weatherOverlay}`,
+                minimumLevel: 0,
+                maximumLevel: 8,
             });
-            const layer = new ImageryLayer(provider, { alpha: 0.6 });
+            const alpha = weatherOverlay === "weather-temperature" ? 0.94 : weatherOverlay === "weather-precipitation" ? 1 : 0.78;
+            const layer = new ImageryLayer(provider, { alpha });
             viewer.imageryLayers.add(layer);
             weatherLayerRef.current = layer;
         } catch (err) {

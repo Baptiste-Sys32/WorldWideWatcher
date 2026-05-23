@@ -98,8 +98,7 @@ export function useViewerInitialization(sceneSettings: any) {
                     viewer.scene.primitives.add(tileset);
 
                     const removeListener = tileset.initialTilesLoaded.addEventListener(() => {
-                        console.log("[GlobeView] Initial tiles loaded — syncing state.");
-                        useStore.getState().updateMapConfig({ baseLayerId: "google-3d" });
+                        console.log("[GlobeView] Initial Google 3D tiles loaded.");
                         clearTimeout(globalTimeout);
                         fireGlobeReady();
                         removeListener();

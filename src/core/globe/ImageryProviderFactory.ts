@@ -11,50 +11,57 @@ export interface ImageryLayerEntry {
     name: string;
     description: string;
     thumbnail?: string;
-    type: "google-3d" | "imagery";
+    type: "osm-3d" | "imagery";
 }
 
 export const IMAGERY_LAYERS: ImageryLayerEntry[] = [
     {
-        id: "google-3d",
-        name: "Google Maps 3D",
-        description: "Photorealistic 3D Tiles",
-        type: "google-3d",
+        id: "osm-3d",
+        name: "OpenStreetMap 3D",
+        description: "OpenStreetMap base with OSM 3D buildings",
+        thumbnail: "https://a.tile.openstreetmap.org/5/16/11.png",
+        type: "osm-3d",
     },
     {
         id: "bing-aerial",
         name: "Bing Maps Aerial",
         description: "High-resolution satellite imagery",
+        thumbnail: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/5/11/16",
         type: "imagery",
     },
     {
         id: "bing-labels",
         name: "Bing Maps Hybrid",
         description: "Aerial with labels",
+        thumbnail: "https://mt0.google.com/vt/lyrs=y&x=16&y=11&z=5",
         type: "imagery",
     },
     {
         id: "bing-road",
         name: "Bing Maps Roads",
         description: "Standard road map",
+        thumbnail: "https://a.tile.openstreetmap.org/5/16/11.png",
         type: "imagery",
     },
     {
         id: "osm",
         name: "OpenStreetMap",
         description: "Community-driven map data",
+        thumbnail: "https://a.tile.openstreetmap.org/5/16/11.png",
         type: "imagery",
     },
     {
         id: "arcgis-world",
         name: "ArcGIS World Imagery",
         description: "Esri satellite tiles",
+        thumbnail: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/5/11/16",
         type: "imagery",
     },
     {
         id: "blue-marble",
         name: "Blue Marble",
         description: "NASA Earth imagery",
+        thumbnail: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief/default/GoogleMapsCompatible_Level8/5/11/16.jpg",
         type: "imagery",
     }
 ];
@@ -124,6 +131,7 @@ export async function createImageryProvider(layerId: string) {
             return await tieredFallback(4, "m");
 
         case "osm":
+        case "osm-3d":
             return createOsmProvider();
 
         case "arcgis-world":

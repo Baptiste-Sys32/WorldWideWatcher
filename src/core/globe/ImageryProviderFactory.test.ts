@@ -4,7 +4,7 @@ import {
 } from "vitest";
 
 import { IonImageryProvider } from "cesium";
-import { createImageryProvider, createOsmProvider } from "./ImageryProviderFactory";
+import { createImageryProvider, createOsmProvider, IMAGERY_LAYERS } from "./ImageryProviderFactory";
 
 // Mock cesium before importing the module under test
 vi.mock("cesium", () => {
@@ -103,6 +103,20 @@ describe("createImageryProvider", () => {
     it("returns OSM for 'osm' layer directly", async () => {
         const provider = await createImageryProvider("osm");
         expect((provider as any).url).toContain("openstreetmap.org");
+    });
+
+    it("returns OSM for the open 3D layer base imagery", async () => {
+        const provider = await createImageryProvider("osm-3d");
+        expect((provider as any).url).toContain("openstreetmap.org");
+    });
+
+    it("defines preview thumbnails for all picker layers", () => {
+        expect(IMAGERY_LAYERS.length).toBeGreaterThan(0);
+        expect(IMAGERY_LAYERS.every((layer) => typeof layer.thumbnail === "string" && layer.thumbnail.length > 0)).toBe(true);
+    });
+
+    it("does not expose Google 3D as a selectable imagery layer", () => {
+        expect(IMAGERY_LAYERS.map((layer) => layer.id)).not.toContain("google-3d");
     });
 
     it("returns OSM for unknown layer ids", async () => {

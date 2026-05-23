@@ -109,7 +109,7 @@ export const createConfigSlice: StateCreator<AppStore, [], [], ConfigSlice> = (s
         maxScreenSpaceError: 32, // Increase from 16 to 32 to significantly reduce 3D tile network requests and costs
         shadowsEnabled: false,
         enableLighting: false,
-        baseLayerId: (typeof window !== "undefined" && window.localStorage && typeof window.localStorage.getItem === "function") ? (localStorage.getItem("wwv_map_layer") || "google-3d") : "google-3d",
+        baseLayerId: (typeof window !== "undefined" && window.localStorage && typeof window.localStorage.getItem === "function") ? (localStorage.getItem("wwv_map_layer") || "osm-3d") : "osm-3d",
         fallbackLayerId: null,
         sceneMode: 3,
         showOsmBuildings: true,
