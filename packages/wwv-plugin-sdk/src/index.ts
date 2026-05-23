@@ -261,6 +261,7 @@ export type PluginCategory =
     | "space"
     | "cyber"
     | "economic"
+    | "weather"
     | "intelligence"
     | "custom";
 
@@ -368,6 +369,18 @@ export interface ServerPluginConfig {
     requiresAuth?: boolean;
     historyEnabled?: boolean;
     availabilityEnabled?: boolean;
+    /** Declares the plugin's primary data transport so the host can avoid incorrect startup fetches. */
+    transportMode?: "polling" | "websocket" | "static" | "manual";
+    /** Human-readable source label shown in diagnostics. */
+    sourceName?: string;
+    /** Non-secret source URL or route shown in diagnostics. */
+    sourceUrl?: string;
+    /** Optional lightweight diagnostics probe metadata. */
+    doctor?: {
+        enabled?: boolean;
+        probePath?: string;
+        expectedShape?: "items" | "data" | "geojson" | "array" | "object";
+    };
     /** WebSocket URL for direct engine connection. Overrides the global default engine URL. */
     streamUrl?: string;
 }
@@ -489,6 +502,22 @@ export type DataBusEvents = {
     globeReady: Record<string, never>;
     pluginError: { pluginId?: string; message: string; error?: Error };
     layerLoadingChanged: { pluginId: string; loading: boolean };
+    sourceHealthChanged: {
+        pluginId: string;
+        patch: {
+            status?: "idle" | "loading" | "healthy" | "degraded" | "error" | "stale";
+            sourceName?: string;
+            sourceUrl?: string;
+            sourceType?: "rest" | "ws" | "static" | "composite";
+            fallbackActive?: boolean;
+            itemCount?: number;
+            latencyMs?: number;
+            lastAttemptAt?: number;
+            lastSuccessAt?: number;
+            lastErrorAt?: number;
+            lastErrorMessage?: string | null;
+        };
+    };
 };
 
 export * from "./viteGlobals";

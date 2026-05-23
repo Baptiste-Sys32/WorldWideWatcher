@@ -11,6 +11,9 @@ import { getVerifiedPluginIds } from "@/lib/marketplace/registryClient";
 import { isDemo, isDemoAdmin } from "@/core/edition";
 import { auth } from "@/lib/auth";
 import { seedDefaultPlugins } from "@/lib/marketplace/seedDefaultPlugins";
+import { BUILT_IN_GLOBAL_FEED_IDS } from "@/plugins/globalFeeds/types";
+
+const BUILT_IN_PLUGIN_IDS = new Set<string>(BUILT_IN_GLOBAL_FEED_IDS);
 
 export async function OPTIONS(request: Request) {
     return handlePreflight(request);
@@ -80,6 +83,7 @@ export async function GET(request: Request) {
                 if (!m) return false;
                 // Skip built-in plugins — already registered by AppShell
                 if (m.trust === "built-in") return false;
+                if (BUILT_IN_PLUGIN_IDS.has(m.id)) return false;
 
                 // Skip stale/malformed records (e.g. old empty-config installs for built-ins)
                 // If it lacks basic required fields, it's a legacy record and we drop it silently
