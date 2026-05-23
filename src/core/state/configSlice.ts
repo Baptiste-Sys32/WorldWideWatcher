@@ -63,6 +63,8 @@ export interface MapConfig {
     sceneMode: 1 | 2 | 3;
     /** Whether OSM 3D Buildings are shown on non-Google imagery layers. */
     showOsmBuildings: boolean;
+    /** Vertical offset applied to OSM 3D Buildings tiles, in meters. */
+    osmBuildingsHeightOffsetMeters: number;
     /** Active weather tile overlay layer ID, or null when disabled. */
     weatherOverlay: string | null;
 }
@@ -113,6 +115,7 @@ export const createConfigSlice: StateCreator<AppStore, [], [], ConfigSlice> = (s
         fallbackLayerId: null,
         sceneMode: 3,
         showOsmBuildings: true,
+        osmBuildingsHeightOffsetMeters: -120,
         weatherOverlay: null,
     },
     updateDataConfig: (config) => set((state) => ({

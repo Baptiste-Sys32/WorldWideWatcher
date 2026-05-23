@@ -3,6 +3,12 @@ import { safeFetch } from "@/lib/security/ssrf";
 
 const MAX_PROBE_BYTES = 256 * 1024;
 
+/**
+ * Summarizes the top-level shape of a JSON payload for diagnostics.
+ *
+ * @param value - Parsed JSON payload from an upstream probe.
+ * @returns A short label describing the response shape.
+ */
 function summarizeShape(value: unknown): string {
     if (Array.isArray(value)) return "array";
     if (value && typeof value === "object") {
@@ -15,12 +21,27 @@ function summarizeShape(value: unknown): string {
     return typeof value;
 }
 
+/**
+ * Probes an upstream URL and returns sanitized diagnostics without body content.
+ *
+ * @param request - Next.js request containing the probe URL.
+ * @returns A JSON response describing probe status, timing, and content shape.
+ */
 export async function POST(request: NextRequest) {
+    const startedAt = Date.now();
+    const responseMs = () => Math.max(0, Date.now() - startedAt);
     try {
         const body = await request.json().catch(() => ({}));
         const url = typeof body.url === "string" ? body.url : "";
         if (!url) {
-            return NextResponse.json({ ok: false, error: "Missing url" }, { status: 400 });
+            return NextResponse.json({
+                ok: false,
+                status: 400,
+                contentType: "application/json",
+                shape: "unknown",
+                responseMs: responseMs(),
+                error: "Missing url",
+            }, { status: 400 });
         }
 
         const upstream = await safeFetch(url, {
@@ -48,11 +69,16 @@ export async function POST(request: NextRequest) {
             status: upstream.status,
             contentType,
             shape,
+            responseMs: responseMs(),
         });
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "Probe failed";
         return NextResponse.json({
             ok: false,
+            status: 502,
+            contentType: "application/json",
+            shape: "unknown",
+            responseMs: responseMs(),
             error: message.includes("SSRF") ? message : "Probe failed",
         }, { status: 502 });
     }

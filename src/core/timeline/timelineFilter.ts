@@ -12,12 +12,51 @@ export interface TimelineFilterCounts {
     untimed: number;
 }
 
-function entityTimeMs(entity: GeoEntity): number | null {
-    const raw = entity.timestamp ?? entity.properties?.timestamp ?? entity.properties?.date ?? entity.properties?.time;
-    const date = raw instanceof Date ? raw : new Date(String(raw));
-    return Number.isNaN(date.getTime()) ? null : date.getTime();
+/**
+ * Parses a timestamp-like value into epoch milliseconds.
+ *
+ * @param raw - Timestamp candidate from entity data.
+ * @returns Epoch milliseconds or null when invalid.
+ */
+function parseTimestamp(raw: unknown): number | null {
+    if (!raw) return null;
+    if (raw instanceof Date) {
+        return Number.isNaN(raw.getTime()) ? null : raw.getTime();
+    }
+    if (typeof raw === "number") {
+        return Number.isFinite(raw) ? raw : null;
+    }
+    if (typeof raw === "string") {
+        const trimmed = raw.trim();
+        if (!trimmed) return null;
+        const numeric = Number(trimmed);
+        if (Number.isFinite(numeric) && /^-?\d+(\.\d+)?$/.test(trimmed)) {
+            return numeric;
+        }
+        const date = new Date(trimmed);
+        return Number.isNaN(date.getTime()) ? null : date.getTime();
+    }
+    return null;
 }
 
+/**
+ * Extracts a normalized timestamp for timeline filtering.
+ *
+ * @param entity - Entity to inspect.
+ * @returns Epoch milliseconds or null when missing.
+ */
+function entityTimeMs(entity: GeoEntity): number | null {
+    const raw = entity.timestamp ?? entity.properties?.timestamp ?? entity.properties?.date ?? entity.properties?.time;
+    return parseTimestamp(raw);
+}
+
+/**
+ * Determines whether an entity is visible within the active timeline state.
+ *
+ * @param entity - Entity to evaluate.
+ * @param options - Playback mode and time range configuration.
+ * @returns True if the entity should be shown.
+ */
 export function isEntityVisibleInTimeline(entity: GeoEntity, options: TimelineFilterOptions): boolean {
     if (!options.playbackMode) return true;
     const ms = entityTimeMs(entity);
@@ -25,6 +64,13 @@ export function isEntityVisibleInTimeline(entity: GeoEntity, options: TimelineFi
     return ms >= options.timeRange.start.getTime() && ms <= options.timeRange.end.getTime();
 }
 
+/**
+ * Filters a collection of items by their entity timestamp and playback range.
+ *
+ * @param items - Item collection with embedded entities.
+ * @param options - Playback mode and time range configuration.
+ * @returns Filtered collection of items.
+ */
 export function filterEntitiesForTimeline<T extends { entity: GeoEntity }>(
     items: T[],
     options: TimelineFilterOptions,
@@ -33,6 +79,13 @@ export function filterEntitiesForTimeline<T extends { entity: GeoEntity }>(
     return items.filter((item) => isEntityVisibleInTimeline(item.entity, options));
 }
 
+/**
+ * Computes visibility counts for a set of entities relative to playback state.
+ *
+ * @param entities - Entity list to evaluate.
+ * @param options - Playback mode and time range configuration.
+ * @returns Visibility counts for the timeline summary.
+ */
 export function countTimelineFilteredEntities(
     entities: GeoEntity[],
     options: TimelineFilterOptions,

@@ -34,6 +34,17 @@ function HighlightMatch({ text, query }: { text: string; query: string }) {
     );
 }
 
+function resultKindLabel(type: string, override?: string): string {
+    if (override) return override;
+    if (type === "address") return "Address";
+    if (type === "country" || type === "place") return "Place";
+    if (type === "entity") return "Entity";
+    if (type === "layer") return "Layer";
+    if (type === "doctor" || type === "command") return "Command";
+    if (type === "plugin") return "Plugin";
+    return type;
+}
+
 /**
  * @component SearchBar
  * @description Primary search input field that manages focus, keyboard navigation,
@@ -200,10 +211,21 @@ export function SearchBar() {
                                         onMouseEnter={() => setSelectedIndex(flatResults.findIndex((r) => r.id === result.id))}
                                       >
                                         <span style={{
- fontWeight: 500, fontSize: "0.85rem", width: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
+ display: "flex", alignItems: "center", gap: "8px", width: "100%", minWidth: 0
 }}
                                         >
-                                          <HighlightMatch text={result.label} query={query} />
+                                          <span style={{
+ fontWeight: 500, fontSize: "0.85rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0
+}}
+                                          >
+                                            <HighlightMatch text={result.label} query={query} />
+                                          </span>
+                                          <span style={{
+ marginLeft: "auto", flexShrink: 0, fontSize: "0.62rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em"
+}}
+                                          >
+                                            {resultKindLabel(result.type, result.resultLabel)}
+                                          </span>
                                         </span>
                                         {result.subLabel && (
                                         <span style={{

@@ -1,3 +1,4 @@
+import { gstime, propagate, twoline2satrec, eciToGeodetic } from "satellite.js";
 import type { GeoEntity } from "@/core/plugins/PluginTypes";
 import type { FeedEntity, GlobalFeedId, SourceMeta } from "./types";
 
@@ -86,6 +87,13 @@ function stringFrom(value: unknown): string | undefined {
     if (typeof value === "string" && value.trim()) return value.trim();
     if (typeof value === "number" && Number.isFinite(value)) return String(value);
     return undefined;
+}
+
+function boolish(value: unknown): boolean {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value !== 0;
+    if (typeof value === "string") return ["true", "yes", "1"].includes(value.trim().toLowerCase());
+    return false;
 }
 
 function severityFrom(value: unknown): string | number | undefined {
@@ -363,6 +371,256 @@ export function normalizeFranceDiseaseIndicators(data: unknown): FeedEntity[] {
             country: "France",
         },
     }));
+}
+
+export function normalizeFirmsCsv(csv: string): FeedEntity[] {
+    const [headerLine, ...rows] = csv.trim().split(/\r?\n/);
+    if (!headerLine) return [];
+    const headers = headerLine.split(",").map((header) => header.trim());
+    return rows.flatMap((row, index) => {
+        const values = row.split(",");
+        const item = Object.fromEntries(headers.map((header, valueIndex) => [header, values[valueIndex]?.trim() ?? ""]));
+        const latitude = numberFrom(item.latitude);
+        const longitude = numberFrom(item.longitude);
+        if (latitude === undefined || longitude === undefined) return [];
+        const acqDate = item.acq_date;
+        const acqTime = item.acq_time?.padStart(4, "0");
+        const timestamp = dateFrom(acqDate && acqTime ? `${acqDate}T${acqTime.slice(0, 2)}:${acqTime.slice(2)}:00Z` : undefined);
+        const confidence = item.confidence;
+        const brightness = numberFrom(item.bright_ti4 ?? item.brightness);
+        return [{
+            id: `wildfire-hotspots-global-${slug(`${item.satellite || "sat"}-${item.latitude}-${item.longitude}-${item.acq_date}-${item.acq_time}-${index}`)}`,
+            pluginId: "wildfire-hotspots",
+            latitude,
+            longitude,
+            timestamp,
+            label: `Thermal hotspot ${confidence ? `(${confidence})` : ""}`.trim(),
+            properties: {
+                ...item,
+                sourceScope: "global" as const,
+                sourceName: "NASA FIRMS",
+                eventType: "wildfire-hotspot",
+                severity: confidence,
+                confidence,
+                brightness,
+                frp: numberFrom(item.frp),
+                satellite: item.satellite,
+            },
+        }];
+    });
+}
+
+export function normalizeEonetWildfires(data: unknown): FeedEntity[] {
+    return toArray(data).flatMap((raw, index) => {
+        if (!isRecord(raw)) return [];
+        const geometry = Array.isArray(raw.geometry) ? raw.geometry[0] : raw.geometry;
+        const eonetCoordinates = isRecord(geometry) && Array.isArray(geometry.coordinates)
+            ? {
+                longitude: numberFrom(geometry.coordinates[0]),
+                latitude: numberFrom(geometry.coordinates[1]),
+            }
+            : null;
+        const coords = eonetCoordinates?.latitude !== undefined && eonetCoordinates.longitude !== undefined
+            ? { latitude: eonetCoordinates.latitude, longitude: eonetCoordinates.longitude }
+            : isRecord(geometry) ? pickCoordinates(geometry) : pickCoordinates(raw);
+        if (!coords) return [];
+        const timestamp = dateFrom(isRecord(geometry) ? geometry.date : raw.date);
+        const id = stringFrom(raw.id) ?? String(index);
+        return [{
+            id: `wildfire-hotspots-global-eonet-${slug(id)}`,
+            pluginId: "wildfire-hotspots",
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            timestamp,
+            label: stringFrom(raw.title) ?? "Wildfire event",
+            properties: {
+                ...raw,
+                sourceScope: "global" as const,
+                sourceName: "NASA EONET",
+                eventType: "wildfire",
+                severity: stringFrom(raw.status) ?? "active",
+            },
+        }];
+    });
+}
+
+export function normalizeOpenAqLatest(data: unknown): FeedEntity[] {
+    return toArray(data).flatMap((raw, index) => {
+        if (!isRecord(raw)) return [];
+        const coords = pickCoordinates(raw.coordinates && isRecord(raw.coordinates) ? raw.coordinates : raw);
+        const measurements = Array.isArray(raw.measurements) ? raw.measurements : [];
+        const measurement = measurements.find(isRecord) as Record<string, unknown> | undefined;
+        if (!coords || !measurement) return [];
+        const parameter = stringFrom(measurement.parameter) ?? "pm25";
+        const value = numberFrom(measurement.value);
+        const timestamp = dateFrom(measurement.lastUpdated ?? measurement.datetime ?? raw.datetime);
+        const location = stringFrom(raw.location ?? raw.name) ?? "Air quality station";
+        return [{
+            id: `air-quality-global-${slug(stringFrom(raw.id) ?? location)}-${parameter}`,
+            pluginId: "air-quality",
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            timestamp,
+            label: `${location} ${parameter.toUpperCase()}`,
+            properties: {
+                ...raw,
+                sourceScope: "global" as const,
+                sourceName: "OpenAQ",
+                eventType: "air-quality",
+                station: location,
+                city: stringFrom(raw.city),
+                country: stringFrom(raw.country),
+                parameter,
+                value,
+                unit: stringFrom(measurement.unit),
+                severity: value,
+            },
+        }];
+    });
+}
+
+export function normalizeOpenMeteoAirQuality(data: unknown): FeedEntity[] {
+    return toArray(data).flatMap((raw, index) => {
+        if (!isRecord(raw)) return [];
+        const coords = pickCoordinates(raw);
+        const current = isRecord(raw.current) ? raw.current : raw;
+        const value = numberFrom(current.pm2_5 ?? current.pm25);
+        if (!coords || value === undefined) return [];
+        const timestamp = dateFrom(current.time ?? raw.time);
+        const city = stringFrom(raw.city ?? raw.name) ?? `Open-Meteo AQ ${index + 1}`;
+        return [{
+            id: `air-quality-global-openmeteo-${slug(city)}`,
+            pluginId: "air-quality",
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            timestamp,
+            label: `${city} PM2.5`,
+            properties: {
+                ...raw,
+                sourceScope: "global" as const,
+                sourceName: "Open-Meteo Air Quality",
+                eventType: "air-quality",
+                station: city,
+                city,
+                parameter: "pm25",
+                value,
+                unit: "ug/m3",
+                severity: value,
+            },
+        }];
+    });
+}
+
+export function normalizeNdbcLatest(
+    text: string,
+    stations: Record<string, { name?: string; latitude: number; longitude: number }> = {},
+): FeedEntity[] {
+    const lines = text.split(/\r?\n/).filter((line) => line.trim() && !line.startsWith("#YY"));
+    return lines.flatMap((line) => {
+        if (line.startsWith("#")) return [];
+        const columns = line.trim().split(/\s+/);
+        const [stationId, yy, mm, dd, hh, minute, windDir, windSpeed, gust, waveHeight, dominantPeriod, averagePeriod, meanWaveDir, pressure, airTemp, waterTemp] = columns;
+        const station = stations[stationId];
+        if (!stationId || !station) return [];
+        const timestamp = dateFrom(`${yy}-${mm}-${dd}T${hh}:${minute}:00Z`);
+        const stale = Date.now() - timestamp.getTime() > 6 * 60 * 60 * 1000;
+        return [{
+            id: `marine-buoys-global-${slug(stationId)}`,
+            pluginId: "marine-buoys",
+            latitude: station.latitude,
+            longitude: station.longitude,
+            timestamp,
+            label: station.name ?? `NDBC ${stationId}`,
+            properties: {
+                sourceScope: "global" as const,
+                sourceName: "NOAA NDBC",
+                eventType: "marine-observation",
+                stationId,
+                stationName: station.name,
+                windDirection: numberFrom(windDir),
+                windSpeed: numberFrom(windSpeed),
+                gust: numberFrom(gust),
+                waveHeight: numberFrom(waveHeight),
+                dominantPeriod: numberFrom(dominantPeriod),
+                averagePeriod: numberFrom(averagePeriod),
+                meanWaveDirection: numberFrom(meanWaveDir),
+                pressure: numberFrom(pressure),
+                airTemp: numberFrom(airTemp),
+                waterTemp: numberFrom(waterTemp),
+                severity: stale ? "stale" : "fresh",
+                stale,
+            },
+        }];
+    });
+}
+
+export function normalizeCelestrakSatellites(data: unknown, group = "active", now = new Date()): FeedEntity[] {
+    return toArray(data).slice(0, 750).flatMap((raw, index) => {
+        if (!isRecord(raw)) return [];
+        const line1 = stringFrom(raw.TLE_LINE1 ?? raw.line1);
+        const line2 = stringFrom(raw.TLE_LINE2 ?? raw.line2);
+        const name = stringFrom(raw.OBJECT_NAME ?? raw.name ?? raw.OBJECT_ID) ?? `Satellite ${index + 1}`;
+        if (!line1 || !line2) return [];
+        try {
+            const satrec = twoline2satrec(line1, line2);
+            const positionAndVelocity = propagate(satrec, now);
+            if (!positionAndVelocity?.position || typeof positionAndVelocity.position === "boolean") return [];
+            const geodetic = eciToGeodetic(positionAndVelocity.position, gstime(now));
+            return [{
+                id: `satellites-global-${slug(stringFrom(raw.NORAD_CAT_ID) ?? name)}`,
+                pluginId: "satellites",
+                latitude: geodetic.latitude * 180 / Math.PI,
+                longitude: geodetic.longitude * 180 / Math.PI,
+                altitude: geodetic.height * 1000,
+                timestamp: now,
+                label: name,
+                properties: {
+                    ...raw,
+                    sourceScope: "global" as const,
+                    sourceName: "CelesTrak",
+                    eventType: "satellite",
+                    orbitGroup: group,
+                    noradId: stringFrom(raw.NORAD_CAT_ID),
+                    active: boolish(raw.OPS_STATUS_CODE) || group === "active",
+                    severity: group,
+                },
+            }];
+        } catch {
+            return [];
+        }
+    });
+}
+
+export function normalizeNwsAlerts(data: unknown): FeedEntity[] {
+    return toArray(data).flatMap((raw, index) => {
+        if (!isRecord(raw)) return [];
+        const properties = isRecord(raw.properties) ? raw.properties : raw;
+        const coords = pickCoordinates(raw) ?? pickCoordinates(properties);
+        if (!coords) return [];
+        const timestamp = dateFrom(properties.effective ?? properties.sent);
+        const id = stringFrom(properties.id ?? raw.id) ?? String(index);
+        return [{
+            id: `us-weather-alerts-us-${slug(id)}`,
+            pluginId: "us-weather-alerts",
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            timestamp,
+            label: stringFrom(properties.event) ?? "US weather alert",
+            properties: {
+                ...properties,
+                sourceScope: "us" as const,
+                sourceName: "NOAA/NWS",
+                eventType: "weather-alert",
+                country: "United States",
+                area: stringFrom(properties.areaDesc),
+                severity: severityFrom(properties.severity),
+                urgency: stringFrom(properties.urgency),
+                effective: stringFrom(properties.effective),
+                expires: stringFrom(properties.expires),
+                scopeLabel: "US only",
+            },
+        }];
+    });
 }
 
 function dedupeKey(entity: GeoEntity): string {

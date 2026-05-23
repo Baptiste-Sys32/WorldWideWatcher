@@ -6,7 +6,7 @@
  * @module src/components/layout
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -40,16 +40,30 @@ export function Header() {
     const setTheme = useStore((s) => s.setTheme);
     const activeLayerPanelTab = useStore((s) => s.activeLayerPanelTab);
     const setActiveLayerPanelTab = useStore((s) => s.setActiveLayerPanelTab);
+    const leftSidebarOpen = useStore((s) => s.leftSidebarOpen);
+    const toggleLeftSidebar = useStore((s) => s.toggleLeftSidebar);
     const activeRightOverlay = useStore((s) => s.activeRightOverlay);
     const setActiveRightOverlay = useStore((s) => s.setActiveRightOverlay);
     const openMobilePanel = useStore((s) => s.openMobilePanel);
     const setOpenMobilePanel = useStore((s) => s.setOpenMobilePanel);
+    const layers = useStore((s) => s.layers);
+    const sourceHealthByPlugin = useStore((s) => s.sourceHealthByPlugin);
 
     const [isDemoAdmin, setIsDemoAdmin] = useState(false);
     const [themeOpen, setThemeOpen] = useState(false);
     const previousLeftTabRef = useRef<"data" | "imagery" | "plugins">("data");
     const themeButtonRef = useRef<HTMLButtonElement>(null);
     const [themePos, setThemePos] = useState({ top: 0, right: 0 });
+    const layerStatus = useMemo(() => {
+        const enabledIds = Object.entries(layers)
+            .filter(([, layer]) => layer.enabled)
+            .map(([pluginId]) => pluginId);
+        const problemCount = enabledIds.filter((pluginId) => {
+            const status = sourceHealthByPlugin[pluginId]?.status;
+            return status === "degraded" || status === "error" || status === "stale";
+        }).length;
+        return { enabledCount: enabledIds.length, problemCount };
+    }, [layers, sourceHealthByPlugin]);
 
     useEffect(() => {
         if (!isDemo) return;
@@ -62,6 +76,26 @@ export function Header() {
     const openLeftTab = (tab: "data" | "imagery" | "plugins" | "settings") => {
         setActiveLayerPanelTab(tab);
         if (isMobile && openMobilePanel !== "left") setOpenMobilePanel("left");
+    };
+
+    const focusLayerSearch = () => {
+        window.setTimeout(() => {
+            document.querySelector<HTMLInputElement>(".layers-tab-search input")?.focus();
+        }, 0);
+    };
+
+    const toggleLayersPanel = () => {
+        const isLayersOpen = activeLayerPanelTab === "data" && (isMobile ? openMobilePanel === "left" : leftSidebarOpen);
+        if (isLayersOpen) {
+            if (isMobile) setOpenMobilePanel("left");
+            else toggleLeftSidebar();
+            trackEvent("panel-toggle", { panel: "left", open: false, tab: "data" });
+            return;
+        }
+
+        openLeftTab("data");
+        focusLayerSearch();
+        trackEvent("panel-tab-switch", { tab: "data" });
     };
 
     const toggleSettings = () => {
@@ -122,15 +156,20 @@ export function Header() {
                 </button>
                 <button
                   type="button"
-                  className="btn btn--flat"
-                  onClick={() => {
-                      openLeftTab("data");
-                      trackEvent("panel-tab-switch", { tab: "data" });
-                  }}
-                  title="Open data layers"
+                  className={`btn btn--flat header-layer-btn ${activeLayerPanelTab === "data" && leftSidebarOpen ? "btn--active" : ""}`}
+                  onClick={toggleLayersPanel}
+                  title={`${activeLayerPanelTab === "data" && leftSidebarOpen ? "Hide" : "Open"} data layers`}
                 >
                   <Layers size={14} />
                   <span>Layers</span>
+                  {layerStatus.enabledCount > 0 && (
+                    <span
+                      className={`header-layer-btn__badge ${layerStatus.problemCount > 0 ? "header-layer-btn__badge--warn" : ""}`}
+                      title={`${layerStatus.enabledCount} enabled layer${layerStatus.enabledCount === 1 ? "" : "s"}${layerStatus.problemCount > 0 ? `, ${layerStatus.problemCount} need attention` : ""}`}
+                    >
+                      {layerStatus.problemCount > 0 ? `${layerStatus.enabledCount}/${layerStatus.problemCount}` : layerStatus.enabledCount}
+                    </span>
+                  )}
                 </button>
                 <button
                   type="button"

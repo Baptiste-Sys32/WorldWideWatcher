@@ -30,6 +30,18 @@ describe("/api/weather/layers", () => {
             "weather-clouds",
             "weather-wind",
         ]);
+        json.layers.forEach((layer: {
+            providerLabel?: string;
+            legend?: unknown[];
+            opacity?: number;
+            freshnessLabel?: string;
+        }) => {
+            expect(layer.providerLabel).toBeTruthy();
+            expect(Array.isArray(layer.legend)).toBe(true);
+            expect(layer.legend?.length).toBeGreaterThan(0);
+            expect(typeof layer.opacity).toBe("number");
+            expect(layer.freshnessLabel).toBeTruthy();
+        });
     });
 
     it("falls back to no-key Open-Meteo layers without an API key", async () => {
@@ -50,5 +62,17 @@ describe("/api/weather/layers", () => {
             "weather-clouds",
             "weather-wind",
         ]);
+        json.layers.forEach((layer: {
+            providerLabel?: string;
+            legend?: unknown[];
+            opacity?: number;
+            freshnessLabel?: string;
+        }) => {
+            expect(layer.providerLabel).toBeTruthy();
+            expect(Array.isArray(layer.legend)).toBe(true);
+            expect(layer.legend?.length).toBeGreaterThan(0);
+            expect(typeof layer.opacity).toBe("number");
+            expect(layer.freshnessLabel).toBeTruthy();
+        });
     });
 });

@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
     mergeAndDedupeEntities,
+    normalizeFirmsCsv,
     normalizeGdacsEvents,
     normalizeMeteoFranceAlerts,
+    normalizeNdbcLatest,
+    normalizeNwsAlerts,
+    normalizeOpenMeteoAirQuality,
 } from "./normalizers";
 import type { FeedEntity } from "./types";
 
@@ -100,6 +104,90 @@ describe("global feed normalizers", () => {
                 sourceScope: "france",
                 sourceName: "Meteo-France",
                 eventType: "tropical-cyclone",
+            },
+        });
+    });
+
+    it("normalizes NASA FIRMS CSV hotspots", () => {
+        const items = normalizeFirmsCsv([
+            "latitude,longitude,bright_ti4,acq_date,acq_time,satellite,confidence,frp",
+            "34.1,-118.2,331.5,2026-05-23,0942,N,high,12.4",
+        ].join("\n"));
+
+        expect(items).toHaveLength(1);
+        expect(items[0]).toMatchObject({
+            pluginId: "wildfire-hotspots",
+            latitude: 34.1,
+            longitude: -118.2,
+            properties: {
+                sourceName: "NASA FIRMS",
+                confidence: "high",
+                brightness: 331.5,
+            },
+        });
+    });
+
+    it("normalizes Open-Meteo air quality fallback rows", () => {
+        const items = normalizeOpenMeteoAirQuality([{
+            city: "Paris",
+            latitude: 48.8566,
+            longitude: 2.3522,
+            current: { time: "2026-05-23T10:00", pm2_5: 9.4 },
+        }]);
+
+        expect(items[0]).toMatchObject({
+            pluginId: "air-quality",
+            properties: {
+                sourceName: "Open-Meteo Air Quality",
+                parameter: "pm25",
+                value: 9.4,
+            },
+        });
+    });
+
+    it("normalizes NOAA NDBC latest observations with station coordinates", () => {
+        const items = normalizeNdbcLatest(
+            [
+                "#STN YY MM DD hh mm WDIR WSPD GST WVHT DPD APD MWD PRES ATMP WTMP DEWP VIS PTDY TIDE",
+                "41001 2026 05 23 10 00 180 7.2 9.8 1.4 8 6 170 1012.3 22.1 20.4 MM MM MM",
+            ].join("\n"),
+            { "41001": { name: "East Hatteras", latitude: 34.7, longitude: -72.7 } },
+        );
+
+        expect(items[0]).toMatchObject({
+            pluginId: "marine-buoys",
+            latitude: 34.7,
+            longitude: -72.7,
+            properties: {
+                sourceName: "NOAA NDBC",
+                stationId: "41001",
+                waveHeight: 1.4,
+            },
+        });
+    });
+
+    it("normalizes NWS alert features under the US-only feed", () => {
+        const items = normalizeNwsAlerts({
+            features: [{
+                id: "alert-1",
+                geometry: { type: "Point", coordinates: [-97.7, 30.2] },
+                properties: {
+                    event: "Severe Thunderstorm Warning",
+                    severity: "Severe",
+                    urgency: "Immediate",
+                    areaDesc: "Travis County",
+                    effective: "2026-05-23T10:00:00Z",
+                    expires: "2026-05-23T11:00:00Z",
+                },
+            }],
+        });
+
+        expect(items[0]).toMatchObject({
+            pluginId: "us-weather-alerts",
+            properties: {
+                sourceScope: "us",
+                sourceName: "NOAA/NWS",
+                scopeLabel: "US only",
             },
         });
     });

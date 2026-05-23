@@ -26,6 +26,7 @@ const DEFAULT_GRAPHICS = {
     enableLighting: false,
     showFps: false,
     showOsmBuildings: true,
+    osmBuildingsHeightOffsetMeters: -120,
 };
 
 const RESOLUTION_OPTIONS = [
@@ -57,10 +58,10 @@ export function GraphicsSettings() {
     // Save to cookie on change
      
     useEffect(() => {
-        const { resolutionScale, antiAliasing, maxScreenSpaceError, shadowsEnabled, enableLighting, showFps, showOsmBuildings } = mapConfig;
-        const graphicsToSave = { resolutionScale, antiAliasing, maxScreenSpaceError, shadowsEnabled, enableLighting, showFps, showOsmBuildings };
+        const { resolutionScale, antiAliasing, maxScreenSpaceError, shadowsEnabled, enableLighting, showFps, showOsmBuildings, osmBuildingsHeightOffsetMeters } = mapConfig;
+        const graphicsToSave = { resolutionScale, antiAliasing, maxScreenSpaceError, shadowsEnabled, enableLighting, showFps, showOsmBuildings, osmBuildingsHeightOffsetMeters };
         document.cookie = `wwv_graphics=${encodeURIComponent(JSON.stringify(graphicsToSave))}; path=/; max-age=31536000`; // 1 year
-    }, [mapConfig.resolutionScale, mapConfig.antiAliasing, mapConfig.maxScreenSpaceError, mapConfig.shadowsEnabled, mapConfig.enableLighting, mapConfig.showFps, mapConfig.showOsmBuildings]);
+    }, [mapConfig.resolutionScale, mapConfig.antiAliasing, mapConfig.maxScreenSpaceError, mapConfig.shadowsEnabled, mapConfig.enableLighting, mapConfig.showFps, mapConfig.showOsmBuildings, mapConfig.osmBuildingsHeightOffsetMeters]);
 
     const toggle = (key: string, current: boolean) => {
         update({ [key]: !current });
@@ -157,6 +158,32 @@ export function GraphicsSettings() {
             onClick={() => toggle("showOsmBuildings", mapConfig.showOsmBuildings)}
             aria-label="Toggle 3D Buildings"
           />
+        </div>
+
+        <div className="gfx-settings__row gfx-settings__row--stacked">
+          <div className="gfx-settings__label-line">
+            <span className="gfx-settings__label">Building Height Offset</span>
+            <span className="gfx-settings__hint">Advanced</span>
+          </div>
+          <div className="gfx-settings__slider-wrap gfx-settings__slider-wrap--wide">
+            <input
+              type="range"
+              className="gfx-settings__slider"
+              min={-500}
+              max={100}
+              step={10}
+              value={mapConfig.osmBuildingsHeightOffsetMeters}
+              onChange={(e) => {
+                            const v = parseInt(e.target.value, 10);
+                            update({ osmBuildingsHeightOffsetMeters: v });
+                        }}
+              onPointerUp={() => trackEvent("graphics-setting", {
+                            key: "osmBuildingsHeightOffsetMeters",
+                            value: mapConfig.osmBuildingsHeightOffsetMeters,
+                        })}
+            />
+            <span className="gfx-settings__slider-value">{mapConfig.osmBuildingsHeightOffsetMeters}m</span>
+          </div>
         </div>
 
         {/* Show FPS */}

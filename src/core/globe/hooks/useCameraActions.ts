@@ -27,7 +27,7 @@ export function useCameraActions(viewer: CesiumViewer | null, isReady: boolean) 
         });
 
         const unsubGoTo = dataBus.on("cameraGoTo", ({
- lat, lon, alt, distance, maxPitch, heading
+ lat, lon, alt, distance, maxPitch, heading, duration
 }) => {
             // Add a slight delay to avoid any immediate state-change cancellations from React
             setTimeout(() => {
@@ -131,7 +131,7 @@ export function useCameraActions(viewer: CesiumViewer | null, isReady: boolean) 
                 viewer.camera.flyTo({
                     destination: finalDestination,
                     orientation: finalOrientation,
-                    duration: 2.0,
+                    duration: duration ?? 2.0,
                     easingFunction: EasingFunction.QUINTIC_IN_OUT,
                     complete: () => {
                         showSearchPin(viewer, lat, lon);

@@ -43,3 +43,43 @@ Audited these feeds: Wildfires, Nuclear Facilities, Military Bases, Embassies, V
 - **Volcanic ash advisories** (VAAC).
 - **Power grid outages** (regional ISO/RTO outage feeds where available).
 - **Disease outbreak signals** (WHO / ProMED / HealthMap).
+
+## 2026-05-23 Global Feeds Source List
+- **Tropical Cyclones**: GDACS (global) + Meteo-France (France).
+- **Flood Alerts**: GDACS (global) + Vigicrues (France).
+- **Drought / Vegetation**: NASA/MODIS (global) + Propluvia (France).
+- **Disease Outbreaks**: WHO (global) + Sante publique France (France).
+
+## Known Fallback Behavior (Composite Feeds)
+- If one source fails, the other source still returns items; diagnostics report which source failed.
+- If both sources fail, the response returns `items: []` with diagnostics instead of throwing.
+- Empty upstream feeds still return `items: []` and diagnostics so health can be inspected.
+
+## Manual QA Checklist (Composite Feeds)
+- Enable each global feed and confirm items render on the globe.
+- Verify the feed response includes `sources` with `ok`, `count`, and latency values.
+- Force one upstream to fail (e.g. block one URL) and confirm the other source still renders.
+- Confirm empty feeds return `items: []` without client-side errors.
+
+## 2026-05-23 App Improvements Completed
+- Added first-party free/open feeds: wildfire hotspots, air quality stations, marine buoys, satellite constellations, and US weather alerts.
+- Extended composite feed diagnostics so API responses expose source health and Plugin Doctor can show source status.
+- Polished the search palette with higher-signal commands, result type labels, and clearer empty states.
+- Replaced address lookup with OpenStreetMap/Nominatim-backed no-key routes, preserving smooth camera flight and the animated search pin.
+- Tuned OSM 3D Buildings alignment to a `-120m` default and kept the advanced height offset slider available.
+- Improved imagery picker preview resilience and kept Google 3D out of the normal picker unless configured.
+- Made the top-nav Layers control a real toggle with active state, layer count, and health-warning badge.
+- Added panel, timeline, and layer-list empty/overflow polish for narrower layouts.
+
+## 2026-05-23 Verification Run
+- `pnpm exec tsc --noEmit`
+- `pnpm lint --quiet`
+- `pnpm vitest run`
+- `pnpm build`
+
+## Follow-up Ideas
+- Show an address lookup unavailable row when Nominatim fails or rate-limits.
+- Add an explicit OpenStreetMap provider label to address results.
+- Let Enter run a direct lookup when typed address text has no selected autocomplete row.
+- Rename Building Height Offset to 3D Building Alignment and add a reset control.
+- Gate or remove noisy UI debug logs in camera/intel actions.

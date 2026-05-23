@@ -1,23 +1,42 @@
 import type { GeoEntity } from "@/core/plugins/PluginTypes";
 
-export type SourceScope = "global" | "france";
+export type SourceScope = "global" | "france" | "us";
 
 export type GlobalFeedId =
     | "tropical-cyclones"
     | "flood-alerts"
     | "drought-vegetation"
-    | "disease-outbreaks";
+    | "disease-outbreaks"
+    | "wildfire-hotspots"
+    | "air-quality"
+    | "marine-buoys"
+    | "satellites"
+    | "us-weather-alerts";
 
 export const BUILT_IN_GLOBAL_FEED_IDS = [
     "tropical-cyclones",
     "flood-alerts",
     "drought-vegetation",
     "disease-outbreaks",
+    "wildfire-hotspots",
+    "air-quality",
+    "marine-buoys",
+    "satellites",
+    "us-weather-alerts",
 ] as const satisfies readonly GlobalFeedId[];
 
 export interface SourceMeta {
     scope: SourceScope;
     sourceName: string;
+}
+
+export interface FeedSourceAudit {
+    sourceName: string;
+    scope: SourceScope;
+    ok: boolean;
+    count: number;
+    errorMessage?: string;
+    latencyMs?: number;
 }
 
 export type FeedEntity = GeoEntity & {
@@ -32,4 +51,5 @@ export type FeedEntity = GeoEntity & {
 
 export interface FeedResponse {
     items: FeedEntity[];
+    sources?: FeedSourceAudit[];
 }

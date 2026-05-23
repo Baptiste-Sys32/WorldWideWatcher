@@ -21,6 +21,11 @@ import { useResizablePanel } from "@/core/hooks/useResizablePanel";
 import { pluginManager } from "@/core/plugins/PluginManager";
 import { useStore } from "@/core/state/store";
 import { trackEvent } from "@/lib/analytics";
+import {
+    WEATHER_LAYER_META_BY_ID,
+    WEATHER_TILE_URL_TEMPLATE,
+    type WeatherLayerId,
+} from "@/plugins/weather/weatherLayers";
 
 import "./index.css";
 
@@ -39,6 +44,12 @@ const REGIONS = [
 
 const TIME_WINDOWS = ["1h", "6h", "24h", "48h", "7d"] as const;
 
+/**
+ * Formats an arbitrary value into a human-readable string for the inspector table.
+ *
+ * @param value - Raw value from entity properties or metadata.
+ * @returns A concise string representation of the input.
+ */
 function formatValue(value: unknown): string {
     if (value === null || value === undefined || value === "") return "None";
     if (value instanceof Date) return value.toLocaleString();
@@ -55,11 +66,25 @@ function formatValue(value: unknown): string {
     return String(value);
 }
 
+/**
+ * Formats a latitude or longitude with hemisphere suffixes.
+ *
+ * @param value - Coordinate value in decimal degrees.
+ * @param positive - Hemisphere label for positive values.
+ * @param negative - Hemisphere label for negative values.
+ * @returns Formatted coordinate string.
+ */
 function formatCoordinate(value?: number, positive = "N", negative = "S") {
     if (typeof value !== "number" || !Number.isFinite(value)) return "Unknown";
     return `${Math.abs(value).toFixed(5)} ${value >= 0 ? positive : negative}`;
 }
 
+/**
+ * Formats a timestamp-like value for display.
+ *
+ * @param value - Timestamp input such as Date, string, or number.
+ * @returns Localized time string or a fallback label.
+ */
 function formatTimestamp(value: unknown) {
     if (!value) return "Unknown";
     const date = value instanceof Date ? value : new Date(String(value));
@@ -67,6 +92,12 @@ function formatTimestamp(value: unknown) {
     return date.toLocaleString();
 }
 
+/**
+ * Returns a human-readable polling interval label for a plugin.
+ *
+ * @param pluginId - The plugin identifier to inspect.
+ * @returns Polling interval label for the plugin.
+ */
 function pollingLabel(pluginId: string) {
     const managed = pluginManager.getPlugin(pluginId);
     if (!managed) return "Unknown";
@@ -79,6 +110,11 @@ function pollingLabel(pluginId: string) {
     }
 }
 
+/**
+ * Right-side data inspector panel for entities and layer diagnostics.
+ *
+ * @returns The inspector sidebar component.
+ */
 export function DataConfigPanel() {
     const isMobile = useIsMobile();
     const { width, startResizing } = useResizablePanel(370, 300, 620, "right");
@@ -109,6 +145,7 @@ export function DataConfigPanel() {
         ? ((entitiesByPlugin[pluginId] ?? []).length || layer?.entityCount || 0)
         : Object.values(layers).reduce((total, item) => total + (item.entityCount ?? 0), 0);
     const sourceHealth = pluginId ? sourceHealthByPlugin[pluginId] : undefined;
+    const weatherMeta = pluginId ? WEATHER_LAYER_META_BY_ID[pluginId as WeatherLayerId] : undefined;
 
     const selectedProps = selectedEntity
         ? Object.entries(selectedEntity.properties ?? {}).slice(0, 8)
@@ -321,6 +358,42 @@ export function DataConfigPanel() {
                 {sourceHealth.lastSuccessAt ? ` · updated ${new Date(sourceHealth.lastSuccessAt).toLocaleTimeString()}` : ""}
                 {sourceHealth.lastErrorMessage ? ` · ${sourceHealth.lastErrorMessage}` : ""}
               </span>
+            </section>
+          )}
+
+          {weatherMeta && !selectedEntity && (
+            <section className="inspector-card weather-overlay-card">
+              <div className="inspector-card__title">Weather Overlay</div>
+              <div className="weather-overlay-card__meta">
+                <div className="weather-overlay-card__row">
+                  <span>Provider</span>
+                  <span>{weatherMeta.providerLabel}</span>
+                </div>
+                <div className="weather-overlay-card__row">
+                  <span>Layer type</span>
+                  <span>{weatherMeta.description}</span>
+                </div>
+                <div className="weather-overlay-card__row">
+                  <span>Opacity</span>
+                  <span>{Math.round(weatherMeta.opacity * 100)}%</span>
+                </div>
+                <div className="weather-overlay-card__row">
+                  <span>Source</span>
+                  <span>{WEATHER_TILE_URL_TEMPLATE}</span>
+                </div>
+                <div className="weather-overlay-card__row">
+                  <span>Freshness</span>
+                  <span>{weatherMeta.freshnessLabel}</span>
+                </div>
+              </div>
+              <div className="weather-overlay-card__legend">
+                {weatherMeta.legend.map((item) => (
+                  <div key={item.label} className="weather-overlay-card__legend-item">
+                    <span className="weather-overlay-card__swatch" style={{ background: item.color }} />
+                    <span>{item.label}</span>
+                  </div>
+                ))}
+              </div>
             </section>
           )}
 

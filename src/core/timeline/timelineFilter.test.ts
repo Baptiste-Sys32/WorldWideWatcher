@@ -39,6 +39,33 @@ describe("timelineFilter", () => {
         expect(filterEntitiesForTimeline(items, { playbackMode: true, timeRange: range }).map((item) => item.entity.id)).toEqual(["in"]);
     });
 
+    it("accepts Date and ISO string timestamps", () => {
+        expect(isEntityVisibleInTimeline(entity("date", new Date("2026-05-22T10:30:00Z")), {
+            playbackMode: true,
+            timeRange: range,
+        })).toBe(true);
+        expect(isEntityVisibleInTimeline(entity("iso", "2026-05-22T10:30:00Z"), {
+            playbackMode: true,
+            timeRange: range,
+        })).toBe(true);
+    });
+
+    it("treats numeric-like invalid values as untimed", () => {
+        expect(isEntityVisibleInTimeline(entity("bad", "123abc"), {
+            playbackMode: true,
+            timeRange: range,
+            strictUntimed: true,
+        })).toBe(false);
+    });
+
+    it("hides untimed entities when strictUntimed is enabled", () => {
+        expect(isEntityVisibleInTimeline(entity("missing", undefined), {
+            playbackMode: true,
+            timeRange: range,
+            strictUntimed: true,
+        })).toBe(false);
+    });
+
     it("counts hidden and untimed entities", () => {
         const counts = countTimelineFilteredEntities([
             entity("in", new Date("2026-05-22T10:30:00Z")),
@@ -47,5 +74,23 @@ describe("timelineFilter", () => {
         ], { playbackMode: true, timeRange: range });
 
         expect(counts).toEqual({ visible: 2, hiddenByTime: 1, untimed: 1 });
+    });
+
+    it("restores all entities when playback mode is off", () => {
+        const items = [
+            { entity: entity("in", new Date("2026-05-22T10:30:00Z")) },
+            { entity: entity("out", new Date("2026-05-22T12:00:00Z")) },
+            { entity: entity("untimed", undefined) },
+        ];
+
+        expect(filterEntitiesForTimeline(items, { playbackMode: true, timeRange: range }).map((item) => item.entity.id)).toEqual([
+            "in",
+            "untimed",
+        ]);
+        expect(filterEntitiesForTimeline(items, { playbackMode: false, timeRange: range }).map((item) => item.entity.id)).toEqual([
+            "in",
+            "out",
+            "untimed",
+        ]);
     });
 });

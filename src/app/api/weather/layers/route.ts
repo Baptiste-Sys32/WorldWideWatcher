@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
-import { WEATHER_LAYERS } from "@/plugins/weather/weatherLayers";
+import { WEATHER_LAYERS, WEATHER_TILE_URL_TEMPLATE } from "@/plugins/weather/weatherLayers";
 
 export const revalidate = 3600;
 
+/**
+ * Returns the catalog of supported weather overlay layers and provider metadata.
+ *
+ * @returns JSON describing weather layer availability and tile template.
+ */
 export async function GET() {
     const usesApiKey = Boolean(process.env.OPENWEATHERMAP_API_KEY?.trim());
 
@@ -13,7 +18,7 @@ export async function GET() {
         usesApiKey,
         freeTier: true,
         fallbackProvider: "Open-Meteo",
-        tileUrlTemplate: "/api/weather/tile/{z}/{x}/{y}?layer={layer}",
+        tileUrlTemplate: WEATHER_TILE_URL_TEMPLATE,
         layers: WEATHER_LAYERS,
     });
 }

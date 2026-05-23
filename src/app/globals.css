@@ -215,6 +215,16 @@ html, body {
   padding: 0 var(--space-md) var(--space-md);
 }
 
+.layers-tab-empty {
+  margin: var(--space-md) 0;
+  padding: var(--space-md);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 
 /* ─── Sidebar ─────────────────────────────────────────────── */
 .sidebar {
@@ -555,6 +565,16 @@ body.sidebar-force-transition .sidebar {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   background: var(--bg-primary);
+}
+
+.timeline__empty-state {
+  padding: 6px 10px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: var(--radius-sm);
+  background: rgba(245, 158, 11, 0.08);
+  color: rgba(245, 158, 11, 0.9);
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .timeline__controls-row {
@@ -1758,6 +1778,25 @@ body.is-resizing-sidebar .sidebar {
   transform: scale(1.03);
 }
 
+.imagery-item__thumbnail::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, rgba(14, 165, 233, 0.22), transparent 48%),
+    linear-gradient(45deg, rgba(34, 197, 94, 0.18), rgba(15, 23, 42, 0.62)),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 9px);
+  opacity: 0;
+}
+
+.imagery-item__image--broken {
+  opacity: 0;
+}
+
+.imagery-item__thumbnail:has(.imagery-item__image--broken)::before {
+  opacity: 1;
+}
+
 .imagery-item__thumbnail::after {
   content: "";
   position: absolute;
@@ -2343,6 +2382,30 @@ body.is-dragging-bottom-panel .bottom-panel {
   color: var(--text-primary);
   background: var(--bg-glass-active);
   border-color: var(--border-medium);
+}
+
+.header-layer-btn {
+  position: relative;
+}
+
+.header-layer-btn__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.18);
+  color: var(--accent-green);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.header-layer-btn__badge--warn {
+  background: rgba(245, 158, 11, 0.18);
+  color: var(--accent-amber);
 }
 
 .btn--flat.btn--icon {

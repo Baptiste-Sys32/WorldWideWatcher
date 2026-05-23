@@ -1,11 +1,12 @@
 /**
  * @file FavoritesTab.tsx
  * @description Tab panel for managing user-saved "favorite" map entities.
- * Categorizes favorites into accessible (layer enabled) and inaccessible (layer disabled).
+ * Categorizes favorites into accessible (layer enabled + timeline visible) and inaccessible entries.
  * @module src/components/panels
  */
 
 import { useStore } from "@/core/state/store";
+import { isEntityVisibleInTimeline } from "@/core/timeline/timelineFilter";
 import { Trash2 } from "lucide-react";
 import { trackEvent } from "@/lib/analytics";
 
@@ -19,6 +20,8 @@ export function FavoritesTab() {
     const removeFavorite = useStore((s) => s.removeFavorite);
     const entitiesByPlugin = useStore((s) => s.entitiesByPlugin);
     const layers = useStore((s) => s.layers);
+    const isPlaybackMode = useStore((s) => s.isPlaybackMode);
+    const timeRange = useStore((s) => s.timeRange);
     const setSelectedEntity = useStore((s) => s.setSelectedEntity);
 
     // Group favorites into Accessible and Inaccessible
@@ -28,7 +31,10 @@ export function FavoritesTab() {
     favorites.forEach((fav) => {
         const isLayerEnabled = layers[fav.pluginId]?.enabled;
         const entityList = entitiesByPlugin[fav.pluginId] || [];
-        const entity = entityList.find((e) => e.id === fav.id);
+        const entity = entityList.find((e) => (
+            e.id === fav.id
+            && isEntityVisibleInTimeline(e, { playbackMode: isPlaybackMode, timeRange })
+        ));
 
         if (isLayerEnabled && entity) {
             accessible.push(fav);
@@ -39,7 +45,10 @@ export function FavoritesTab() {
 
     const handleSelect = (fav: typeof favorites[0]) => {
         const entityList = entitiesByPlugin[fav.pluginId] || [];
-        const entity = entityList.find((e) => e.id === fav.id);
+        const entity = entityList.find((e) => (
+            e.id === fav.id
+            && isEntityVisibleInTimeline(e, { playbackMode: isPlaybackMode, timeRange })
+        ));
         if (entity) {
             setSelectedEntity(entity);
             trackEvent("favorite-select", { plugin: fav.pluginId });

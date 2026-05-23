@@ -89,7 +89,14 @@ export function ImageryPicker() {
                           >
                             <div className="imagery-item__thumbnail">
                               {layer.thumbnail ? (
-                                <img src={layer.thumbnail} alt="" loading="lazy" />
+                                <img
+                                  src={layer.thumbnail}
+                                  alt=""
+                                  loading="lazy"
+                                  onError={(event) => {
+                                      event.currentTarget.classList.add("imagery-item__image--broken");
+                                  }}
+                                />
                               ) : (
                                 <Box size={20} className="imagery-item__icon" />
                               )}

@@ -20,13 +20,24 @@ import "./PluginDoctor.css";
 
 type CheckTone = "ok" | "warn" | "bad" | "info";
 
+interface DoctorSection {
+    title: string;
+    items: string[];
+}
+
 interface DoctorResult {
     tone: CheckTone;
     summary: string;
-    details: string[];
+    sections: DoctorSection[];
     checkedAt: number;
 }
 
+/**
+ * Maps source health statuses to UI tones.
+ *
+ * @param status - Health status value from the store.
+ * @returns Visual tone used by the doctor UI.
+ */
 function toneForStatus(status?: string): CheckTone {
     if (status === "healthy") return "ok";
     if (status === "error") return "bad";
@@ -34,9 +45,17 @@ function toneForStatus(status?: string): CheckTone {
     return "info";
 }
 
-function validateEntities(pluginId: string, entities: GeoEntity[]): string[] {
+/**
+ * Validates a sample of entity shapes for a plugin.
+ *
+ * @param pluginId - Plugin identifier to check.
+ * @param entities - Entities to validate.
+ * @returns Validation issues and count of validated entities.
+ */
+function validateEntities(pluginId: string, entities: GeoEntity[]): { checked: number; issues: string[] } {
     const issues: string[] = [];
-    for (const entity of entities.slice(0, 25)) {
+    const sample = entities.slice(0, 25);
+    for (const entity of sample) {
         if (!entity.id) issues.push("entity missing id");
         if (entity.pluginId !== pluginId) issues.push(`entity ${entity.id || "(unknown)"} has pluginId ${entity.pluginId}`);
         if (typeof entity.latitude !== "number" || !Number.isFinite(entity.latitude)) issues.push(`entity ${entity.id} has invalid latitude`);
@@ -44,9 +63,15 @@ function validateEntities(pluginId: string, entities: GeoEntity[]): string[] {
         const timestamp = entity.timestamp instanceof Date ? entity.timestamp : new Date(String(entity.timestamp));
         if (Number.isNaN(timestamp.getTime())) issues.push(`entity ${entity.id} has invalid timestamp`);
     }
-    return Array.from(new Set(issues));
+    return { checked: sample.length, issues: Array.from(new Set(issues)) };
 }
 
+/**
+ * Normalizes probe URLs to safe relative or HTTPS endpoints.
+ *
+ * @param url - URL string to normalize.
+ * @returns Sanitized probe URL or null if unsafe.
+ */
 function safeProbeUrl(url?: string): string | null {
     if (!url) return null;
     if (url.startsWith("/")) return url;
@@ -58,6 +83,22 @@ function safeProbeUrl(url?: string): string | null {
     }
 }
 
+/**
+ * Formats a millisecond timestamp into a local date-time string.
+ *
+ * @param value - Epoch milliseconds.
+ * @returns Formatted string or null when missing.
+ */
+function formatHealthTime(value?: number): string | null {
+    if (!value) return null;
+    return new Date(value).toLocaleString();
+}
+
+/**
+ * Runs diagnostics across plugins and shows results in grouped sections.
+ *
+ * @returns Plugin doctor panel content.
+ */
 export function PluginDoctor() {
     const layers = useStore((s) => s.layers);
     const entitiesByPlugin = useStore((s) => s.entitiesByPlugin);
@@ -66,60 +107,101 @@ export function PluginDoctor() {
     const setActiveLayerPanelTab = useStore((s) => s.setActiveLayerPanelTab);
     const [results, setResults] = useState<Record<string, DoctorResult>>({});
     const [running, setRunning] = useState<Record<string, boolean>>({});
+    const [refreshing, setRefreshing] = useState<Record<string, boolean>>({});
 
     const aliases = useMemo(() => getPluginAliases(), []);
     const managedPlugins = pluginManager.getAllPlugins();
 
+    /**
+     * Executes a diagnostic check for a single plugin.
+     *
+     * @param pluginId - Plugin identifier to probe.
+     */
     const runCheck = async (pluginId: string) => {
         const managed = pluginManager.getPlugin(pluginId);
         const metadata = resolvePluginMetadata(pluginId);
         const entities = entitiesByPlugin[pluginId] ?? [];
         const health = sourceHealthByPlugin[pluginId];
-        const details: string[] = [];
+        const registrationItems: string[] = [];
+        const sourceItems: string[] = [];
+        const probeItems: string[] = [];
+        const entityItems: string[] = [];
         let tone: CheckTone = toneForStatus(health?.status);
 
         setRunning((prev) => ({ ...prev, [pluginId]: true }));
         try {
             if (!managed) {
                 tone = "bad";
-                details.push("Plugin is not registered with PluginManager.");
+                registrationItems.push("PluginManager: missing registration");
+            } else {
+                registrationItems.push("PluginManager: registered");
             }
             if (!metadata) {
                 tone = "bad";
-                details.push("Plugin metadata could not be resolved.");
+                registrationItems.push("Metadata: missing");
             } else {
-                details.push(`Trust: ${metadata.trust}`);
-                details.push(`Category: ${metadata.category}`);
+                registrationItems.push(`Trust: ${metadata.trust}`);
+                registrationItems.push(`Category: ${metadata.category}`);
             }
-            if (aliases[pluginId]) details.push(`Engine alias: ${aliases[pluginId]}`);
-            if (health?.lastErrorMessage) details.push(`Last error: ${health.lastErrorMessage}`);
-            if (health?.lastSuccessAt) details.push(`Last success: ${new Date(health.lastSuccessAt).toLocaleString()}`);
+            if (aliases[pluginId]) registrationItems.push(`Engine alias: ${aliases[pluginId]}`);
 
-            const entityIssues = validateEntities(pluginId, entities);
-            if (entityIssues.length > 0) {
+            const sourceName = health?.sourceName ?? managed?.plugin.name ?? pluginId;
+            const sourceUrl = safeProbeUrl(health?.sourceUrl ?? managed?.plugin.getServerConfig?.()?.sourceUrl);
+            sourceItems.push(`Source: ${sourceName}`);
+            sourceItems.push(`Status: ${health?.status ?? "unknown"}`);
+            sourceItems.push(`URL: ${sourceUrl ?? "Unavailable"}`);
+            sourceItems.push(`Last success: ${formatHealthTime(health?.lastSuccessAt) ?? "Never"}`);
+            sourceItems.push(`Last error: ${formatHealthTime(health?.lastErrorAt) ?? "None"}`);
+            if (health?.lastErrorMessage) {
+                sourceItems.push(`Error message: ${health.lastErrorMessage}`);
+            }
+
+            const entityCheck = validateEntities(pluginId, entities);
+            if (entityCheck.issues.length > 0) {
                 tone = tone === "bad" ? "bad" : "warn";
-                details.push(...entityIssues.slice(0, 5));
+                entityItems.push(`Validated ${entityCheck.checked.toLocaleString()} entities`);
+                entityItems.push(`${entityCheck.issues.length} validation issues`);
+                entityItems.push(...entityCheck.issues.slice(0, 5));
             } else if (entities.length > 0) {
-                details.push(`${entities.length.toLocaleString()} entities passed shape checks.`);
+                entityItems.push(`${entities.length.toLocaleString()} entities loaded`);
+                entityItems.push(`Validated ${entityCheck.checked.toLocaleString()} entities (no issues)`);
             } else {
-                details.push("No loaded entities to validate.");
+                entityItems.push("No loaded entities to validate.");
             }
 
             const probeUrl = safeProbeUrl(health?.sourceUrl ?? managed?.plugin.getServerConfig?.()?.sourceUrl);
             if (probeUrl) {
                 const probe = probeUrl.startsWith("/")
-                    ? await fetch(probeUrl).then(async (res) => ({
-                        ok: res.ok,
-                        status: res.status,
-                        shape: "local route",
-                    })).catch((err) => ({ ok: false, status: 0, error: err instanceof Error ? err.message : String(err) }))
+                    ? await (async () => {
+                        const started = performance.now();
+                        const res = await fetch(probeUrl);
+                        const contentType = res.headers.get("content-type") ?? "";
+                        await res.clone().arrayBuffer().catch(() => null);
+                        return {
+                            ok: res.ok,
+                            status: res.status,
+                            shape: "local route",
+                            contentType,
+                            responseMs: Math.round(performance.now() - started),
+                        };
+                    })().catch((err) => ({
+                        ok: false,
+                        status: 0,
+                        error: err instanceof Error ? err.message : String(err),
+                    }))
                     : await fetch("/api/plugins/doctor", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ url: probeUrl }),
                     }).then((res) => res.json());
-                details.push(`Probe: ${probe.ok ? "ok" : "failed"}${probe.status ? ` HTTP ${probe.status}` : ""}${probe.shape ? ` (${probe.shape})` : ""}`);
+
+                probeItems.push(`HTTP: ${probe.status ?? "n/a"} (${probe.ok ? "ok" : "failed"})`);
+                if (probe.contentType) probeItems.push(`Content: ${probe.contentType}`);
+                if (probe.shape) probeItems.push(`Shape: ${probe.shape}`);
+                if (probe.responseMs !== undefined) probeItems.push(`Latency: ${probe.responseMs} ms`);
                 if (!probe.ok) tone = tone === "bad" ? "bad" : "warn";
+            } else {
+                probeItems.push("Probe: unavailable");
             }
 
             setResults((prev) => ({
@@ -127,7 +209,12 @@ export function PluginDoctor() {
                 [pluginId]: {
                     tone,
                     summary: tone === "ok" ? "Healthy" : tone === "warn" ? "Needs attention" : tone === "bad" ? "Failing" : "No live data yet",
-                    details,
+                    sections: [
+                        { title: "Registration", items: registrationItems },
+                        { title: "Source", items: sourceItems },
+                        { title: "Probe", items: probeItems },
+                        { title: "Entities", items: entityItems },
+                    ],
                     checkedAt: Date.now(),
                 },
             }));
@@ -136,9 +223,36 @@ export function PluginDoctor() {
         }
     };
 
+    /**
+     * Runs diagnostics for every managed plugin.
+     */
     const runAll = () => {
         for (const managed of managedPlugins) {
             void runCheck(managed.plugin.id);
+        }
+    };
+
+    /**
+     * Forces a data refresh for an enabled plugin.
+     *
+     * @param pluginId - Plugin identifier to refresh.
+     */
+    const runRefresh = async (pluginId: string) => {
+        const managed = pluginManager.getPlugin(pluginId);
+        const isEnabled = layers[pluginId]?.enabled ?? false;
+        if (!managed || !isEnabled) return;
+        setRefreshing((prev) => ({ ...prev, [pluginId]: true }));
+        try {
+            const managerWithRefresh = pluginManager as typeof pluginManager & {
+                refreshPlugin?: (id: string) => Promise<void>;
+            };
+            if (managerWithRefresh.refreshPlugin) {
+                await managerWithRefresh.refreshPlugin(pluginId);
+                return;
+            }
+            await pluginManager.fetchForPlugin(pluginId, useStore.getState().timeRange);
+        } finally {
+            setRefreshing((prev) => ({ ...prev, [pluginId]: false }));
         }
     };
 
@@ -182,9 +296,16 @@ export function PluginDoctor() {
                       {health?.sourceName && <span>{health.sourceName}</span>}
                     </div>
                     {result && (
-                      <ul className="plugin-doctor-row__details">
-                        {result.details.map((detail) => <li key={detail}>{detail}</li>)}
-                      </ul>
+                      <div className="plugin-doctor-row__sections">
+                        {result.sections.map((section) => (
+                          <div key={section.title} className="plugin-doctor-row__section">
+                            <div className="plugin-doctor-row__section-title">{section.title}</div>
+                            <ul className="plugin-doctor-row__section-items">
+                              {section.items.map((item) => <li key={item}>{item}</li>)}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                   <div className="plugin-doctor-row__actions">
@@ -197,6 +318,15 @@ export function PluginDoctor() {
                       title="Focus layer"
                     >
                       Focus
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void runRefresh(plugin.id)}
+                      disabled={!layer?.enabled || refreshing[plugin.id]}
+                      title={layer?.enabled ? "Retry fetch" : "Enable the layer to retry fetch"}
+                    >
+                      <RefreshCw size={12} />
+                      {refreshing[plugin.id] ? "Retrying" : "Retry fetch"}
                     </button>
                     <button type="button" onClick={() => runCheck(plugin.id)} disabled={running[plugin.id]}>
                       <Play size={12} />

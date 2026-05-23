@@ -10,12 +10,11 @@ import {
     Cartographic,
     Cartesian3,
     Matrix4,
+    Math as CesiumMath,
     createOsmBuildingsAsync
 } from "cesium";
 import { useStore } from "@/core/state/store";
 import { createImageryProvider, createOsmProvider } from "./ImageryProviderFactory";
-
-const OSM_BUILDINGS_HEIGHT_OFFSET_METERS = -180;
 
 export function useImageryManager(viewerInstance: CesiumViewer | null, viewerReady: boolean) {
     const viewer = viewerInstance;
@@ -23,6 +22,7 @@ export function useImageryManager(viewerInstance: CesiumViewer | null, viewerRea
     const fallbackLayerId = useStore((s) => s.mapConfig.fallbackLayerId);
     const sceneMode = useStore((s) => s.mapConfig.sceneMode);
     const showOsmBuildings = useStore((s) => s.mapConfig.showOsmBuildings);
+    const osmBuildingsHeightOffsetMeters = useStore((s) => s.mapConfig.osmBuildingsHeightOffsetMeters);
     const weatherOverlay = useStore((s) => s.mapConfig.weatherOverlay);
 
     // Resolve runtime truth:
@@ -34,14 +34,45 @@ export function useImageryManager(viewerInstance: CesiumViewer | null, viewerRea
     const currentImageryLayerRef = useRef<ImageryLayer | null>(null);
     // const googleTilesetRef = useRef<Cesium3DTileset | null>(null);
     const osmBuildingsRef = useRef<Cesium3DTileset | null>(null);
+    const osmBuildingsBaseMatrixRef = useRef<Matrix4 | null>(null);
     const weatherLayerRef = useRef<ImageryLayer | null>(null);
 
+    function getVisibleHeightReference(): Cartographic | null {
+        if (!viewer || viewer.isDestroyed()) return null;
+        const cameraCartographic = Cartographic.fromCartesian(viewer.camera.positionWC);
+        if (
+            Number.isFinite(cameraCartographic.latitude)
+            && Number.isFinite(cameraCartographic.longitude)
+            && Math.abs(CesiumMath.toDegrees(cameraCartographic.latitude)) <= 90
+        ) {
+            return cameraCartographic;
+        }
+        const tileset = osmBuildingsRef.current;
+        return tileset ? Cartographic.fromCartesian(tileset.boundingSphere.center) : null;
+    }
+
     function setTilesetHeightOffset(tileset: Cesium3DTileset, heightOffsetMeters: number) {
-        const cartographic = Cartographic.fromCartesian(tileset.boundingSphere.center);
+        const baseMatrix = osmBuildingsBaseMatrixRef.current ?? Matrix4.clone(tileset.modelMatrix, new Matrix4());
+        osmBuildingsBaseMatrixRef.current = baseMatrix;
+
+        if (heightOffsetMeters === 0) {
+            tileset.modelMatrix = Matrix4.clone(baseMatrix, new Matrix4());
+            if (viewer && !viewer.isDestroyed()) {
+                viewer.scene.requestRender();
+            }
+            return;
+        }
+
+        const cartographic = getVisibleHeightReference();
+        if (!cartographic) return;
         const surface = Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, 0);
         const offset = Cartesian3.fromRadians(cartographic.longitude, cartographic.latitude, heightOffsetMeters);
         const translation = Cartesian3.subtract(offset, surface, new Cartesian3());
-        tileset.modelMatrix = Matrix4.fromTranslation(translation);
+        const offsetMatrix = Matrix4.fromTranslation(translation);
+        tileset.modelMatrix = Matrix4.multiply(offsetMatrix, baseMatrix, new Matrix4());
+        if (viewer && !viewer.isDestroyed()) {
+            viewer.scene.requestRender();
+        }
     }
 
     // 1. Manage Scene Mode (2D / 3D / Columbus)
@@ -143,13 +174,15 @@ export function useImageryManager(viewerInstance: CesiumViewer | null, viewerRea
                     return;
                 }
                 (tileset as any)._wwvOsmBuildings = true;
+                osmBuildingsBaseMatrixRef.current = Matrix4.clone(tileset.modelMatrix, new Matrix4());
                 tileset.maximumScreenSpaceError = 16;
-                setTilesetHeightOffset(tileset, OSM_BUILDINGS_HEIGHT_OFFSET_METERS);
+                setTilesetHeightOffset(tileset, osmBuildingsHeightOffsetMeters);
                 tileset.style = new Cesium3DTileStyle({
                     color: "color('#E0DDD5')",
                 });
                 viewer.scene.primitives.add(tileset);
                 osmBuildingsRef.current = tileset;
+                viewer.scene.requestRender();
             }).catch((err) => {
                 console.warn("[useImageryManager] Failed to load OSM 3D Buildings:", err);
             });
@@ -161,8 +194,14 @@ export function useImageryManager(viewerInstance: CesiumViewer | null, viewerRea
                 viewer.scene.primitives.remove(osmBuildingsRef.current);
             }
             osmBuildingsRef.current = null;
+            osmBuildingsBaseMatrixRef.current = null;
         }
     }, [viewer, viewerReady, isGoogle3D, isOsm3D, is3DMode, showOsmBuildings]);
+
+    useEffect(() => {
+        if (!osmBuildingsRef.current) return;
+        setTilesetHeightOffset(osmBuildingsRef.current, osmBuildingsHeightOffsetMeters);
+    }, [osmBuildingsHeightOffsetMeters, viewer]);
 
     // 4. Manage Weather Overlay (semi-transparent tile layer above base imagery)
     useEffect(() => {

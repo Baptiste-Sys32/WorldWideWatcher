@@ -11,21 +11,37 @@ import type {
     TimeRange,
     WorldPlugin,
 } from "@/core/plugins/PluginTypes";
+import {
+    WEATHER_LAYER_META_BY_ID,
+    WEATHER_LAYERS,
+    type WeatherLayerId,
+} from "./weatherLayers";
 
-export const WEATHER_OVERLAY_PLUGIN_IDS = [
-    "weather-temperature",
-    "weather-precipitation",
-    "weather-clouds",
-    "weather-wind",
-] as const;
+export const WEATHER_OVERLAY_PLUGIN_IDS = WEATHER_LAYERS.map((layer) => layer.id) as WeatherLayerId[];
 
-export type WeatherOverlayPluginId = (typeof WEATHER_OVERLAY_PLUGIN_IDS)[number];
+export type WeatherOverlayPluginId = WeatherLayerId;
 
-export const WEATHER_OVERLAY_LABELS: Record<WeatherOverlayPluginId, string> = {
-    "weather-temperature": "Temperature",
-    "weather-precipitation": "Precipitation",
-    "weather-clouds": "Clouds",
-    "weather-wind": "Wind",
+export const WEATHER_OVERLAY_LABELS = Object.fromEntries(
+    WEATHER_LAYERS.map((layer) => [layer.id, layer.name]),
+) as Record<WeatherOverlayPluginId, string>;
+
+const WEATHER_VISUALS: Record<WeatherLayerId, { color: string; icon: typeof Thermometer }> = {
+    "weather-temperature": {
+        color: "#f97316",
+        icon: Thermometer,
+    },
+    "weather-precipitation": {
+        color: "#38bdf8",
+        icon: CloudRain,
+    },
+    "weather-clouds": {
+        color: "#cbd5e1",
+        icon: Cloud,
+    },
+    "weather-wind": {
+        color: "#2dd4bf",
+        icon: Wind,
+    },
 };
 
 const WEATHER_PLUGIN_META: Array<{
@@ -34,38 +50,22 @@ const WEATHER_PLUGIN_META: Array<{
     description: string;
     color: string;
     icon: typeof Thermometer;
-}> = [
-    {
-        id: "weather-temperature",
-        name: "Temperature",
-        description: "Current global 2 m temperature overlay.",
-        color: "#f97316",
-        icon: Thermometer,
-    },
-    {
-        id: "weather-precipitation",
-        name: "Precipitation",
-        description: "Current rain and snow intensity overlay.",
-        color: "#38bdf8",
-        icon: CloudRain,
-    },
-    {
-        id: "weather-clouds",
-        name: "Clouds",
-        description: "Current cloud cover overlay.",
-        color: "#cbd5e1",
-        icon: Cloud,
-    },
-    {
-        id: "weather-wind",
-        name: "Wind",
-        description: "Current 10 m wind speed and direction overlay.",
-        color: "#2dd4bf",
-        icon: Wind,
-    },
-];
+}> = WEATHER_LAYERS.map((layer) => ({
+    id: layer.id,
+    name: layer.name,
+    description: layer.description,
+    color: WEATHER_VISUALS[layer.id].color,
+    icon: WEATHER_VISUALS[layer.id].icon,
+}));
 
+/**
+ * Builds a weather overlay plugin definition from metadata.
+ *
+ * @param meta - Weather layer metadata including labels and rendering color.
+ * @returns A WorldPlugin that renders a weather imagery overlay.
+ */
 function makeWeatherPlugin(meta: (typeof WEATHER_PLUGIN_META)[number]): WorldPlugin {
+    const layerMeta = WEATHER_LAYER_META_BY_ID[meta.id];
     return {
         id: meta.id,
         name: meta.name,
@@ -92,7 +92,7 @@ function makeWeatherPlugin(meta: (typeof WEATHER_PLUGIN_META)[number]): WorldPlu
             apiBasePath: "/api/weather",
             pollingIntervalMs: 0,
             transportMode: "static",
-            sourceName: "OpenWeatherMap / Open-Meteo",
+            sourceName: layerMeta?.providerLabel ?? "OpenWeatherMap / Open-Meteo",
             sourceUrl: "/api/weather/layers",
             doctor: {
                 enabled: true,

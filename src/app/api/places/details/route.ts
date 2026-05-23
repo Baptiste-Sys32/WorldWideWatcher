@@ -1,63 +1,103 @@
 import { NextResponse } from "next/server";
 
-// Server-side cache: keyed by place_id, 24-hour TTL (place geometry is stable)
 const cache = new Map<string, { data: unknown; expiresAt: number }>();
-const TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const TTL_MS = 24 * 60 * 60 * 1000;
+const NOMINATIM_LOOKUP_URL = "https://nominatim.openstreetmap.org/lookup";
+
+function osmIdFromPlaceId(placeId: string): string | null {
+    const match = placeId.match(/^osm:(node|way|relation):(\d+)$/);
+    if (!match) return null;
+    const prefix = match[1] === "node" ? "N" : match[1] === "way" ? "W" : "R";
+    return `${prefix}${match[2]}`;
+}
+
+function viewportFromBoundingBox(boundingbox: unknown) {
+    if (!Array.isArray(boundingbox) || boundingbox.length < 4) return null;
+    const [south, north, west, east] = boundingbox.map(Number);
+    if (![south, north, west, east].every(Number.isFinite)) return null;
+    return {
+        northeast: { lat: north, lng: east },
+        southwest: { lat: south, lng: west },
+    };
+}
+
+function classifyNominatimType(item: Record<string, unknown>): string[] {
+    const category = String(item.category ?? "");
+    const type = String(item.type ?? "");
+    const addressType = String(item.addresstype ?? "");
+    if (["house", "building", "place"].includes(category) && ["house", "residential", "yes"].includes(type)) {
+        return ["street_address"];
+    }
+    if (["road", "highway"].includes(category) || addressType === "road") return ["route"];
+    if (["city", "town", "village", "municipality"].includes(type) || addressType === "city") return ["locality", "political"];
+    if (addressType === "country" || type === "country") return ["country", "political"];
+    if (category === "amenity" || category === "tourism" || category === "shop") return ["establishment", "point_of_interest"];
+    return ["geocode"];
+}
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const placeId = searchParams.get("place_id");
 
-    if (!placeId || typeof placeId !== "string") {
+    if (!placeId) {
         return NextResponse.json({ error: "place_id is required" }, { status: 400 });
     }
 
-    // Use user-provided key if present in header AND looks valid, otherwise fall back to .env
-    const userKey = request.headers.get("X-User-Google-Key");
-    const isValidUserKey = userKey && userKey.length >= 20;
-    const apiKey = isValidUserKey ? userKey : process.env.GOOGLE_MAPS_API_KEY;
-    if (!apiKey) {
-        console.error("GOOGLE_MAPS_API_KEY is not defined and no user key provided");
-        return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
+    const osmIds = osmIdFromPlaceId(placeId);
+    if (!osmIds) {
+        return NextResponse.json({ error: "Unsupported place_id" }, { status: 400 });
     }
 
-    // Separate cache entries for user-provided keys vs default
-    const cachePrefix = userKey ? `user:${userKey.slice(0, 8)}:` : "";
-    const cacheId = `${cachePrefix}${placeId}`;
-    const cached = cache.get(cacheId);
+    const cached = cache.get(placeId);
     if (cached && Date.now() < cached.expiresAt) {
         return NextResponse.json(cached.data);
     }
 
+    const params = new URLSearchParams({
+        osm_ids: osmIds,
+        format: "jsonv2",
+        addressdetails: "1",
+    });
+
     try {
-        const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(
-            placeId
-        )}&fields=geometry,name,types,formatted_address&key=${apiKey}`;
+        const response = await fetch(`${NOMINATIM_LOOKUP_URL}?${params.toString()}`, {
+            headers: {
+                Accept: "application/json",
+                "User-Agent": "WorldWideView/2.16 address-lookup",
+                Referer: "https://worldwideview.dev",
+            },
+            next: { revalidate: 86400 },
+        });
 
-        const response = await fetch(url);
-        const data = await response.json();
-
-        if (data.status !== "OK") {
-            console.error("Google Places Details API Error:", data);
-            return NextResponse.json({ error: "Failed to fetch place details" }, { status: 500 });
+        if (!response.ok) {
+            return NextResponse.json({ error: "Failed to fetch place details" }, { status: 502 });
         }
 
-        const location = data.result.geometry?.location;
-        if (!location) {
+        const data = await response.json();
+        const item = Array.isArray(data) ? data[0] as Record<string, unknown> | undefined : undefined;
+        if (!item) {
+            return NextResponse.json({ error: "No geometry found for place" }, { status: 404 });
+        }
+
+        const lat = Number(item.lat);
+        const lon = Number(item.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
             return NextResponse.json({ error: "No geometry found for place" }, { status: 404 });
         }
 
         const result = {
-            lat: location.lat,
-            lon: location.lng,
-            name: data.result.name,
-            types: data.result.types || [],
-            viewport: data.result.geometry?.viewport || null,
+            lat,
+            lon,
+            name: typeof item.name === "string" ? item.name : String(item.display_name ?? "Address"),
+            formattedAddress: item.display_name,
+            types: classifyNominatimType(item),
+            viewport: viewportFromBoundingBox(item.boundingbox),
+            provider: "OpenStreetMap",
         };
-        cache.set(cacheId, { data: result, expiresAt: Date.now() + TTL_MS });
+        cache.set(placeId, { data: result, expiresAt: Date.now() + TTL_MS });
         return NextResponse.json(result);
     } catch (error) {
-        console.error("Error in Places Details route:", error);
+        console.error("Error in OSM Places details route:", error);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }

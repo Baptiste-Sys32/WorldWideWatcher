@@ -35,4 +35,11 @@ describe("createGlobalFeedPlugin", () => {
     it("uses the natural disaster category expected by the layer panel", () => {
         expect(createGlobalFeedPlugin("disease-outbreaks").category).toBe("natural-disaster");
     });
+
+    it("assigns domain categories for the new feed wave", () => {
+        expect(createGlobalFeedPlugin("air-quality").category).toBe("weather");
+        expect(createGlobalFeedPlugin("marine-buoys").category).toBe("maritime");
+        expect(createGlobalFeedPlugin("satellites").category).toBe("space");
+        expect(createGlobalFeedPlugin("us-weather-alerts").category).toBe("weather");
+    });
 });

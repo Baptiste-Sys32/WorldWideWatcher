@@ -220,3 +220,48 @@
     display: block;
     margin-bottom: var(--space-sm);
 }
+
+.weather-overlay-card__meta {
+    display: grid;
+    gap: 6px;
+    font-size: 11px;
+}
+
+.weather-overlay-card__row {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    color: var(--text-primary);
+}
+
+.weather-overlay-card__row span:first-child {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.weather-overlay-card__legend {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 6px 10px;
+    margin-top: 6px;
+}
+
+.weather-overlay-card__legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.weather-overlay-card__swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 4px;
+    border: 1px solid var(--border-subtle);
+    flex: 0 0 auto;
+}

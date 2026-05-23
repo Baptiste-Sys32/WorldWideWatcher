@@ -10,7 +10,6 @@ import { useStore } from "@/core/state/store";
 import { dataBus } from "@/core/data/DataBus";
 import { pluginManager } from "@/core/plugins/PluginManager";
 import { WEATHER_OVERLAY_PLUGIN_IDS, type WeatherOverlayPluginId } from "@/plugins/weather/weatherOverlayPlugins";
-import { buildUserKeyHeaders } from "@/lib/userApiKeys";
 import { trackEvent } from "@/lib/analytics";
 import { getZoomForTypes } from "./placeCategories";
 import { useSearchHistory } from "./useSearchHistory";
@@ -21,6 +20,16 @@ import { searchLocations } from "./searchLocations";
 export type { SearchResult, SearchSection };
 
 const WEATHER_PLUGIN_IDS = new Set<string>(WEATHER_OVERLAY_PLUGIN_IDS);
+
+function commandScore(label: string, subLabel: string, query: string, base: number): number {
+    const haystack = `${label} ${subLabel}`.toLowerCase();
+    const normalizedLabel = label.toLowerCase();
+    if (normalizedLabel === query) return base + 60;
+    if (normalizedLabel.replace(/^open /, "") === query) return base + 55;
+    if (normalizedLabel.startsWith(query)) return base + 45;
+    if (haystack.includes(query)) return base;
+    return -1;
+}
 
 function isWeatherPluginId(pluginId: string): pluginId is WeatherOverlayPluginId {
     return WEATHER_PLUGIN_IDS.has(pluginId);
@@ -82,10 +91,15 @@ export function useSearch() {
                     id: `layer:${plugin.id}`,
                     label: plugin.name,
                     subLabel: `${enabled ? "Enabled" : "Disabled"} layer · ${plugin.category}`,
-                    score: plugin.name.toLowerCase().startsWith(q) ? 80 : 35,
+                    score: plugin.name.toLowerCase() === q || plugin.id.toLowerCase() === q
+                        ? 145
+                        : plugin.name.toLowerCase().startsWith(q) || plugin.id.toLowerCase().startsWith(q)
+                            ? 125
+                            : 75,
                     lat: 0,
                     lon: 0,
                     type: "layer" as const,
+                    resultLabel: "Layer",
                     pluginId: plugin.id,
                     action: () => {
                         const state = useStore.getState();
@@ -129,13 +143,36 @@ export function useSearch() {
 
             const commandCandidates: SearchResult[] = [
                 {
+                    id: "command:weather",
+                    label: "Open Weather",
+                    subLabel: "Show weather feeds and overlays",
+                    type: "command",
+                    score: 0,
+                    lat: 0,
+                    lon: 0,
+                    resultLabel: "Command",
+                    action: () => setActiveLayerPanelTab("data"),
+                },
+                {
+                    id: "command:imagery",
+                    label: "Open Imagery",
+                    subLabel: "Switch map imagery and view mode",
+                    type: "command",
+                    score: 0,
+                    lat: 0,
+                    lon: 0,
+                    resultLabel: "Command",
+                    action: () => setActiveLayerPanelTab("imagery"),
+                },
+                {
                     id: "command:doctor",
                     label: "Open Plugin Doctor",
                     subLabel: "Diagnostics, source health, and plugin probes",
                     type: "doctor",
-                    score: 70,
+                    score: 0,
                     lat: 0,
                     lon: 0,
+                    resultLabel: "Command",
                     action: () => {
                         setActiveLayerPanelTab("settings");
                         setConfigPanelOpen(true);
@@ -146,9 +183,10 @@ export function useSearch() {
                     label: "Open Timeline",
                     subLabel: "Playback mode and time filtering",
                     type: "command",
-                    score: 65,
+                    score: 0,
                     lat: 0,
                     lon: 0,
+                    resultLabel: "Command",
                     action: () => setActiveBottomPanel("timeline"),
                 },
                 {
@@ -156,19 +194,35 @@ export function useSearch() {
                     label: "Open Layers",
                     subLabel: "Show the data feed list",
                     type: "command",
-                    score: 65,
+                    score: 0,
                     lat: 0,
                     lon: 0,
+                    resultLabel: "Command",
                     action: () => setActiveLayerPanelTab("data"),
+                },
+                {
+                    id: "command:enabled-layers",
+                    label: "Show Enabled Layers",
+                    subLabel: "Filter the layer panel to active feeds",
+                    type: "command",
+                    score: 0,
+                    lat: 0,
+                    lon: 0,
+                    resultLabel: "Command",
+                    action: () => {
+                        setActiveLayerPanelTab("data");
+                        setConfigPanelOpen(true);
+                    },
                 },
                 {
                     id: "command:plugins",
                     label: "Open Plugins",
                     subLabel: "Manage installed plugins",
                     type: "plugin",
-                    score: 60,
+                    score: 0,
                     lat: 0,
                     lon: 0,
+                    resultLabel: "Command",
                     action: () => setActiveLayerPanelTab("plugins"),
                 },
                 {
@@ -176,9 +230,10 @@ export function useSearch() {
                     label: "Open Filters",
                     subLabel: "Time frame and entity filters",
                     type: "command",
-                    score: 60,
+                    score: 0,
                     lat: 0,
                     lon: 0,
+                    resultLabel: "Command",
                     action: () => setActiveRightOverlay("filters"),
                 },
                 {
@@ -186,14 +241,16 @@ export function useSearch() {
                     label: "Toggle Playback Mode",
                     subLabel: "Filter visible entities by timeline range",
                     type: "command",
-                    score: 55,
+                    score: 0,
                     lat: 0,
                     lon: 0,
+                    resultLabel: "Command",
                     action: () => setPlaybackMode(!useStore.getState().isPlaybackMode),
                 },
             ];
             const commandResults = commandCandidates
-                .filter((result) => `${result.label} ${result.subLabel}`.toLowerCase().includes(q))
+                .map((result) => ({ ...result, score: commandScore(result.label, result.subLabel ?? "", q, 100) }))
+                .filter((result) => result.score >= 0)
                 .sort((a, b) => b.score - a.score);
             if (commandResults.length > 0) {
                 newSections.push({
@@ -217,7 +274,7 @@ export function useSearch() {
     }, [query, setActiveBottomPanel, setActiveLayerPanelTab, setActiveRightOverlay, setConfigPanelOpen, setPlaybackMode]);
 
     const handleSelect = async (result: SearchResult) => {
-        if (result.type === "entity" || result.type === "place" || result.type === "country") {
+        if (result.type === "entity" || result.type === "place" || result.type === "address" || result.type === "country") {
             addToHistory(result);
         }
         setIsOpen(false);
@@ -233,12 +290,10 @@ export function useSearch() {
                 alt: result.entity.altitude || 0
             });
             setSelectedEntity(result.entity);
-        } else if (result.type === "country" || result.type === "place") {
+        } else if (result.type === "country" || result.type === "place" || result.type === "address") {
             setSelectedEntity(null);
             try {
-                const res = await fetch(`/api/places/details?place_id=${result.id}`, {
-                    headers: buildUserKeyHeaders(),
-                });
+                const res = await fetch(`/api/places/details?place_id=${result.id}`);
                 if (res.ok) {
                     const data = await res.json();
                     if (data.lat && data.lon) {
@@ -249,7 +304,8 @@ export function useSearch() {
                             alt: 0,
                             distance,
                             maxPitch,
-                            heading: 0
+                            heading: 0,
+                            duration: result.type === "address" ? 3.0 : 2.0,
                         });
                         setCameraPosition(data.lat, data.lon, distance);
                     }

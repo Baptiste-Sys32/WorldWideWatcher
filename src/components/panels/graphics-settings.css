@@ -19,6 +19,25 @@
   white-space: nowrap;
 }
 
+.gfx-settings__row--stacked {
+  align-items: stretch;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.gfx-settings__label-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.gfx-settings__hint {
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
 /* ── Dropdown select ──────────────────────────────────────── */
 .gfx-settings__select {
   appearance: none;
@@ -99,6 +118,11 @@
   max-width: 140px;
 }
 
+.gfx-settings__slider-wrap--wide {
+  max-width: none;
+  width: 100%;
+}
+
 .gfx-settings__slider {
   flex: 1;
   height: 4px;
@@ -143,6 +167,6 @@
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-muted);
-  min-width: 22px;
+  min-width: 42px;
   text-align: right;
 }

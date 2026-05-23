@@ -36,6 +36,7 @@ const CATEGORY_LABELS: Record<string, string> = {
     "natural-disaster": "Natural Disasters",
     conflict: "Conflict",
     infrastructure: "Infrastructure",
+    space: "Space",
     cyber: "Cyber",
     economic: "Economic",
     weather: "Weather",
@@ -218,6 +219,11 @@ export function LayerPanel() {
               </div>
             </div>
             <div className="layers-tab-content__list">
+              {Object.keys(grouped).length === 0 && (
+                <div className="layers-tab-empty">
+                  {query ? "No feeds match this filter." : "No feeds are available."}
+                </div>
+              )}
               {Object.entries(grouped).map(([category, plugins]) => (
                 <section key={category}>
                   <div className="layer-category-title">{CATEGORY_LABELS[category] || category}</div>

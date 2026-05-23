@@ -33,7 +33,7 @@ export const IMAGERY_LAYERS: ImageryLayerEntry[] = [
         id: "bing-labels",
         name: "Bing Maps Hybrid",
         description: "Aerial with labels",
-        thumbnail: "https://mt0.google.com/vt/lyrs=y&x=16&y=11&z=5",
+        thumbnail: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/5/11/16",
         type: "imagery",
     },
     {

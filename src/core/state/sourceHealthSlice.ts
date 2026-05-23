@@ -4,6 +4,15 @@ import type { AppStore } from "./store";
 export type SourceHealthStatus = "idle" | "loading" | "healthy" | "degraded" | "error" | "stale";
 export type SourceType = "rest" | "ws" | "static" | "composite";
 
+export interface SourceHealthDetail {
+    sourceName: string;
+    scope: string;
+    ok: boolean;
+    count: number;
+    errorMessage?: string;
+    latencyMs?: number;
+}
+
 export interface SourceHealth {
     status: SourceHealthStatus;
     lastSuccessAt?: number;
@@ -16,6 +25,7 @@ export interface SourceHealth {
     fallbackActive?: boolean;
     itemCount?: number;
     latencyMs?: number;
+    sources?: SourceHealthDetail[];
 }
 
 export interface SourceHealthSlice {

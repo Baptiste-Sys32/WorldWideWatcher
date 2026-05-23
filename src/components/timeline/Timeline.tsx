@@ -71,6 +71,8 @@ export function Timeline() {
             };
         }, { visible: 0, hiddenByTime: 0, untimed: 0 });
 
+    const showEmptyPlayback = isPlaybackMode && timelineCounts.visible === 0 && timelineCounts.hiddenByTime > 0;
+
     const formatTime = (date: Date) => (mounted ? `${date.toLocaleTimeString()} — ${date.toLocaleDateString()}` : "...");
 
     return (
@@ -192,6 +194,11 @@ export function Timeline() {
             </>
           )}
         </div>
+        {showEmptyPlayback && (
+          <div className="timeline__empty-state">
+            Playback hides all timed entities in the current window. Expand the range or disable playback.
+          </div>
+        )}
       </div>
     );
 }

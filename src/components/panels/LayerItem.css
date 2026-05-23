@@ -10,6 +10,7 @@
   border: 1px solid transparent;
   transition: background var(--duration-fast), border-color var(--duration-fast);
   margin-bottom: 2px;
+  min-width: 0;
 }
 
 .layer-item:hover {
@@ -47,6 +48,7 @@
   align-items: center;
   gap: 6px;
   margin-bottom: 1px;
+  min-width: 0;
 }
 
 .layer-item__name {
@@ -70,8 +72,10 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
   margin-top: 3px;
   min-height: 16px;
+  min-width: 0;
 }
 
 /* ─── Unverified Icon ────────────────────────────── */

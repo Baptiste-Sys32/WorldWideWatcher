@@ -498,7 +498,7 @@ export type DataBusEvents = {
     timeRangeChanged: { timeRange: TimeRange };
     cameraPreset: { presetId: string };
     cameraFaceTowards: { lat: number; lon: number; alt: number };
-    cameraGoTo: { lat: number; lon: number; alt: number; distance?: number; maxPitch?: number; heading?: number };
+    cameraGoTo: { lat: number; lon: number; alt: number; distance?: number; maxPitch?: number; heading?: number; duration?: number };
     globeReady: Record<string, never>;
     pluginError: { pluginId?: string; message: string; error?: Error };
     layerLoadingChanged: { pluginId: string; loading: boolean };
@@ -516,6 +516,14 @@ export type DataBusEvents = {
             lastSuccessAt?: number;
             lastErrorAt?: number;
             lastErrorMessage?: string | null;
+            sources?: Array<{
+                sourceName: string;
+                scope: string;
+                ok: boolean;
+                count: number;
+                errorMessage?: string;
+                latencyMs?: number;
+            }>;
         };
     };
 };
