@@ -12,6 +12,7 @@ import { useStore } from "@/core/state/store";
 import { pluginManager } from "@/core/plugins/PluginManager";
 import type { GeoEntity, CesiumEntityOptions } from "@/core/plugins/PluginTypes";
 import { applyFilters } from "@/core/filters/filterEngine";
+import { isEntityVisibleInTimeline } from "@/core/timeline/timelineFilter";
 import { dataBus } from "@/core/data/DataBus";
 import { PluginErrorBoundary } from "@/components/common/PluginErrorBoundary";
 import { subscribeToCameraPresets } from "./CameraController";
@@ -75,6 +76,8 @@ maxScreenSpaceError,
 enableLighting,
     }), [showFps, resolutionScale, antiAliasing, maxScreenSpaceError, shadowsEnabled, enableLighting]);
     const filters = useStore((s) => s.filters);
+    const isPlaybackMode = useStore((s) => s.isPlaybackMode);
+    const timeRange = useStore((s) => s.timeRange);
     const pluginSettings = useStore((s) => s.dataConfig.pluginSettings);
     const lockedEntityId = useStore((s) => s.lockedEntityId);
     const setCameraPosition = useStore((s) => s.setCameraPosition);
@@ -99,6 +102,7 @@ enableLighting,
             const defs = managed.plugin.getFilterDefinitions?.() || [];
             const active = filters[pluginId] || {};
             applyFilters(entities, defs, active).forEach((entity) => {
+                if (!isEntityVisibleInTimeline(entity, { playbackMode: isPlaybackMode, timeRange })) return;
                 const originalOptions = getCachedRenderOptions(managed.plugin, entity);
 
                 // Apply color overrides
@@ -113,7 +117,7 @@ enableLighting,
             });
         });
         return result;
-    }, [layers, entitiesByPlugin, filters, pluginSettings]);
+    }, [layers, entitiesByPlugin, filters, pluginSettings, isPlaybackMode, timeRange]);
 
     const { isGoogle3D } = useImageryManager(viewerRef.current, viewerReady);
     useBorders(viewerRef.current, showLabels, isGoogle3D);
@@ -127,7 +131,8 @@ enableLighting,
     useSatelliteFrustum(viewerRef.current, viewerReady, selectedEntity, animatablesMapRef);
 
     const cameraLayerEnabled = layers.camera?.enabled ?? false;
-    const cameraEntities = entitiesByPlugin.camera || [];
+    const cameraEntities = (entitiesByPlugin.camera || [])
+        .filter((entity) => isEntityVisibleInTimeline(entity, { playbackMode: isPlaybackMode, timeRange }));
     useFrustumRendering(viewerRef.current, viewerReady, cameraEntities, cameraLayerEnabled);
 
     useEffect(() => {

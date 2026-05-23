@@ -7,11 +7,10 @@
  * @module src/components/layout
  */
 
-import { useState, useEffect, useRef } from "react";
-import { Search, MapPin } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { Search } from "lucide-react";
 import { useIsMobile } from "@/core/hooks/useIsMobile";
 import { useSearch } from "./useSearch";
-import type { SearchResult, SearchSection } from "./useSearch";
 
 /**
  * @function HighlightMatch
@@ -50,6 +49,7 @@ export function SearchBar() {
 
     const containerRef = useRef<HTMLDivElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -59,6 +59,18 @@ export function SearchBar() {
         };
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [setIsOpen]);
+
+    useEffect(() => {
+        const handleShortcut = (event: KeyboardEvent) => {
+            if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+                event.preventDefault();
+                inputRef.current?.focus();
+                setIsOpen(true);
+            }
+        };
+        window.addEventListener("keydown", handleShortcut);
+        return () => window.removeEventListener("keydown", handleShortcut);
     }, [setIsOpen]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -107,6 +119,7 @@ export function SearchBar() {
         >
           <Search size={16} color="var(--text-muted)" style={{ marginRight: "8px", flexShrink: 0 }} />
           <input
+            ref={inputRef}
             type="text"
             value={query}
             onChange={(e) => {
@@ -115,7 +128,7 @@ export function SearchBar() {
                     }}
             onFocus={() => setIsOpen(true)}
             onKeyDown={handleKeyDown}
-            placeholder="Search places, addresses, flights..."
+            placeholder="Search or run command..."
             style={{
                         background: "transparent",
                         border: "none",

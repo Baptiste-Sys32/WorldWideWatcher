@@ -1,6 +1,7 @@
 import { useStore } from "@/core/state/store";
 import { pluginManager } from "@/core/plugins/PluginManager";
 import { PluginIcon } from "@/components/common/PluginIcon";
+import { isEntityVisibleInTimeline } from "@/core/timeline/timelineFilter";
 import type { SearchResult, SearchSection } from "./searchTypes";
 
 export function calculateScore(query: string, text: string | undefined): number {
@@ -17,7 +18,7 @@ export function searchEntities(
     query: string,
     layers: Record<string, { enabled: boolean }>
 ): SearchSection[] {
-    const {entitiesByPlugin} = useStore.getState();
+    const {entitiesByPlugin, isPlaybackMode, timeRange} = useStore.getState();
     const sections: SearchSection[] = [];
 
     for (const [pluginId, entities] of Object.entries(entitiesByPlugin)) {
@@ -26,6 +27,7 @@ export function searchEntities(
 
         const results: SearchResult[] = [];
         for (const entity of entities) {
+            if (!isEntityVisibleInTimeline(entity, { playbackMode: isPlaybackMode, timeRange })) continue;
             let maxScore = calculateScore(query, entity.label || entity.id);
             if (entity.properties) {
                 for (const val of Object.values(entity.properties)) {

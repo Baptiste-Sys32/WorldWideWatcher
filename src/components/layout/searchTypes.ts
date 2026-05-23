@@ -8,10 +8,11 @@ export interface SearchResult {
     score: number;
     lat: number;
     lon: number;
-    type: "country" | "entity" | "place";
+    type: "country" | "entity" | "place" | "layer" | "plugin" | "command" | "doctor";
     pluginId?: string;
     entity?: GeoEntity;
     placeCategory?: PlaceCategory;
+    action?: () => void | Promise<void>;
 }
 
 export interface SearchSection {

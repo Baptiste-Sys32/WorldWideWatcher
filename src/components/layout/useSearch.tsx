@@ -1,9 +1,15 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Clock } from "lucide-react";
+import {
+    Clock,
+    Command,
+    Layers,
+} from "lucide-react";
 import { useStore } from "@/core/state/store";
 import { dataBus } from "@/core/data/DataBus";
+import { pluginManager } from "@/core/plugins/PluginManager";
+import { WEATHER_OVERLAY_PLUGIN_IDS, type WeatherOverlayPluginId } from "@/plugins/weather/weatherOverlayPlugins";
 import { buildUserKeyHeaders } from "@/lib/userApiKeys";
 import { trackEvent } from "@/lib/analytics";
 import { getZoomForTypes } from "./placeCategories";
@@ -14,6 +20,12 @@ import { searchLocations } from "./searchLocations";
 
 export type { SearchResult, SearchSection };
 
+const WEATHER_PLUGIN_IDS = new Set<string>(WEATHER_OVERLAY_PLUGIN_IDS);
+
+function isWeatherPluginId(pluginId: string): pluginId is WeatherOverlayPluginId {
+    return WEATHER_PLUGIN_IDS.has(pluginId);
+}
+
 export function useSearch() {
     const [query, setQuery] = useState("");
     const [isOpen, setIsOpen] = useState(false);
@@ -21,6 +33,11 @@ export function useSearch() {
     const [selectedIndex, setSelectedIndex] = useState(0);
     const setCameraPosition = useStore((s) => s.setCameraPosition);
     const setSelectedEntity = useStore((s) => s.setSelectedEntity);
+    const setActiveLayerPanelTab = useStore((s) => s.setActiveLayerPanelTab);
+    const setActiveRightOverlay = useStore((s) => s.setActiveRightOverlay);
+    const setActiveBottomPanel = useStore((s) => s.setActiveBottomPanel);
+    const setConfigPanelOpen = useStore((s) => s.setConfigPanelOpen);
+    const setPlaybackMode = useStore((s) => s.setPlaybackMode);
     const { history, addToHistory, clearHistory } = useSearchHistory();
 
     const sections: SearchSection[] = useMemo(() => {
@@ -56,6 +73,137 @@ export function useSearch() {
             }
             const currentLayers = useStore.getState().layers;
             const newSections = searchEntities(query, currentLayers);
+            const q = query.trim().toLowerCase();
+            const layerResults: SearchResult[] = pluginManager.getAllPlugins().flatMap(({ plugin }) => {
+                const haystack = `${plugin.name} ${plugin.id} ${plugin.description} ${plugin.category}`.toLowerCase();
+                if (!haystack.includes(q)) return [];
+                const enabled = currentLayers[plugin.id]?.enabled ?? false;
+                return [{
+                    id: `layer:${plugin.id}`,
+                    label: plugin.name,
+                    subLabel: `${enabled ? "Enabled" : "Disabled"} layer · ${plugin.category}`,
+                    score: plugin.name.toLowerCase().startsWith(q) ? 80 : 35,
+                    lat: 0,
+                    lon: 0,
+                    type: "layer" as const,
+                    pluginId: plugin.id,
+                    action: () => {
+                        const state = useStore.getState();
+                        const isEnabled = state.layers[plugin.id]?.enabled;
+                        if (isEnabled) {
+                            pluginManager.disablePlugin(plugin.id);
+                            state.setLayerEnabled(plugin.id, false);
+                            state.clearEntities(plugin.id);
+                            state.setEntityCount(plugin.id, 0);
+                            if (isWeatherPluginId(plugin.id)) {
+                                state.updateMapConfig({ weatherOverlay: null });
+                            }
+                        } else {
+                            if (isWeatherPluginId(plugin.id)) {
+                                for (const weatherPluginId of WEATHER_OVERLAY_PLUGIN_IDS) {
+                                    if (weatherPluginId === plugin.id) continue;
+                                    pluginManager.disablePlugin(weatherPluginId);
+                                    state.setLayerEnabled(weatherPluginId, false);
+                                    state.clearEntities(weatherPluginId);
+                                    state.setEntityCount(weatherPluginId, 0);
+                                }
+                                state.updateMapConfig({ weatherOverlay: plugin.id });
+                            }
+                            void pluginManager.enablePlugin(plugin.id);
+                            state.setLayerEnabled(plugin.id, true);
+                        }
+                        state.setHighlightLayerId(plugin.id);
+                        state.setActiveLayerPanelTab("data");
+                        state.setConfigPanelOpen(true);
+                    },
+                }];
+            }).sort((a, b) => b.score - a.score).slice(0, 8);
+            if (layerResults.length > 0) {
+                newSections.push({
+                    title: "Layers",
+                    icon: <Layers size={16} />,
+                    results: layerResults,
+                    maxScore: layerResults[0].score,
+                });
+            }
+
+            const commandCandidates: SearchResult[] = [
+                {
+                    id: "command:doctor",
+                    label: "Open Plugin Doctor",
+                    subLabel: "Diagnostics, source health, and plugin probes",
+                    type: "doctor",
+                    score: 70,
+                    lat: 0,
+                    lon: 0,
+                    action: () => {
+                        setActiveLayerPanelTab("settings");
+                        setConfigPanelOpen(true);
+                    },
+                },
+                {
+                    id: "command:timeline",
+                    label: "Open Timeline",
+                    subLabel: "Playback mode and time filtering",
+                    type: "command",
+                    score: 65,
+                    lat: 0,
+                    lon: 0,
+                    action: () => setActiveBottomPanel("timeline"),
+                },
+                {
+                    id: "command:layers",
+                    label: "Open Layers",
+                    subLabel: "Show the data feed list",
+                    type: "command",
+                    score: 65,
+                    lat: 0,
+                    lon: 0,
+                    action: () => setActiveLayerPanelTab("data"),
+                },
+                {
+                    id: "command:plugins",
+                    label: "Open Plugins",
+                    subLabel: "Manage installed plugins",
+                    type: "plugin",
+                    score: 60,
+                    lat: 0,
+                    lon: 0,
+                    action: () => setActiveLayerPanelTab("plugins"),
+                },
+                {
+                    id: "command:filters",
+                    label: "Open Filters",
+                    subLabel: "Time frame and entity filters",
+                    type: "command",
+                    score: 60,
+                    lat: 0,
+                    lon: 0,
+                    action: () => setActiveRightOverlay("filters"),
+                },
+                {
+                    id: "command:playback",
+                    label: "Toggle Playback Mode",
+                    subLabel: "Filter visible entities by timeline range",
+                    type: "command",
+                    score: 55,
+                    lat: 0,
+                    lon: 0,
+                    action: () => setPlaybackMode(!useStore.getState().isPlaybackMode),
+                },
+            ];
+            const commandResults = commandCandidates
+                .filter((result) => `${result.label} ${result.subLabel}`.toLowerCase().includes(q))
+                .sort((a, b) => b.score - a.score);
+            if (commandResults.length > 0) {
+                newSections.push({
+                    title: "Commands",
+                    icon: <Command size={16} />,
+                    results: commandResults,
+                    maxScore: commandResults[0].score,
+                });
+            }
+
             const locationSection = await searchLocations(query);
             if (isStale) return;
             if (locationSection) newSections.push(locationSection);
@@ -66,15 +214,19 @@ export function useSearch() {
 
         const timer = setTimeout(run, 300);
         return () => { isStale = true; clearTimeout(timer); };
-    }, [query]);
+    }, [query, setActiveBottomPanel, setActiveLayerPanelTab, setActiveRightOverlay, setConfigPanelOpen, setPlaybackMode]);
 
     const handleSelect = async (result: SearchResult) => {
-        addToHistory(result);
+        if (result.type === "entity" || result.type === "place" || result.type === "country") {
+            addToHistory(result);
+        }
         setIsOpen(false);
         setQuery("");
         trackEvent("search-select", { type: result.type, label: result.label });
         trackEvent("search-query", { query: result.label });
-        if (result.type === "entity" && result.entity) {
+        if (result.action) {
+            await result.action();
+        } else if (result.type === "entity" && result.entity) {
             dataBus.emit("cameraGoTo", {
                 lat: result.lat,
                 lon: result.lon,

@@ -11,6 +11,7 @@
 import React, { useState, useEffect } from "react";
 import { useStore } from "@/core/state/store";
 import { isHistoryEnabled as default_isHistoryEnabled, isDemo, DEMO_ADMIN_ROLE } from "@/core/edition";
+import { countTimelineFilteredEntities } from "@/core/timeline/timelineFilter";
 
 /**
  * @component Timeline
@@ -24,6 +25,8 @@ export function Timeline() {
     const playbackSpeed = useStore((s) => s.playbackSpeed);
     const isPlaybackMode = useStore((s) => s.isPlaybackMode);
     const timelineAvailability = useStore((s) => s.timelineAvailability);
+    const entitiesByPlugin = useStore((s) => s.entitiesByPlugin);
+    const layers = useStore((s) => s.layers);
     const showTimelineHighlight = useStore((s) => s.dataConfig.experimentalFeatures.showTimelineHighlight);
 
     const setPlaying = useStore((s) => s.setPlaying);
@@ -57,6 +60,16 @@ export function Timeline() {
     };
 
     const speeds = [1, 2, 10, 100];
+    const timelineCounts = Object.entries(entitiesByPlugin)
+        .filter(([pluginId]) => layers[pluginId]?.enabled)
+        .reduce((total, [, entities]) => {
+            const counts = countTimelineFilteredEntities(entities, { playbackMode: isPlaybackMode, timeRange });
+            return {
+                visible: total.visible + counts.visible,
+                hiddenByTime: total.hiddenByTime + counts.hiddenByTime,
+                untimed: total.untimed + counts.untimed,
+            };
+        }, { visible: 0, hiddenByTime: 0, untimed: 0 });
 
     const formatTime = (date: Date) => (mounted ? `${date.toLocaleTimeString()} — ${date.toLocaleDateString()}` : "...");
 
@@ -169,6 +182,15 @@ export function Timeline() {
           <span className="timeline__time">
             {mounted ? timeRange.end.toLocaleTimeString() : ""}
           </span>
+        </div>
+        <div className="timeline__summary">
+          <span>{timelineCounts.visible.toLocaleString()} visible</span>
+          {isPlaybackMode && (
+            <>
+              <span>{timelineCounts.hiddenByTime.toLocaleString()} hidden by time</span>
+              <span>{timelineCounts.untimed.toLocaleString()} untimed</span>
+            </>
+          )}
         </div>
       </div>
     );
