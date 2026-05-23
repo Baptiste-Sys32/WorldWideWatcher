@@ -3,6 +3,7 @@ import { dataBus } from "./DataBus";
 import { pluginManager } from "../plugins/PluginManager";
 import { useStore } from "../state/store";
 import { normalizeAviationEntities } from "./normalizeAviationEntities";
+import { toEnginePluginId, toRegistryPluginId } from "../plugins/pluginIds";
 
 interface EngineConnection {
   ws: WebSocket | null;
@@ -21,11 +22,6 @@ const RECONNECT_MAX_MS = 60000; // Cap at 1 minute
 const RECONNECT_JITTER_MS = 4000;
 const STABLE_CONNECTION_MS = 5000; // Reset backoff after 5s of stable connection
 const CLEANUP_GRACE_MS = 30000;
-
-/** Normalizes underscore-based pluginIds to kebab-case (e.g. `my_plugin` → `my-plugin`). */
-function normalizePluginId(id: string): string {
-  return id.replace(/_/g, "-");
-}
 
 class WebSocketClient {
   private engines = new Map<string, EngineConnection>();
@@ -68,6 +64,18 @@ class WebSocketClient {
       for (const pluginId of engine.subscriptions) {
         this.send(engine, { action: "subscribe", pluginId });
       }
+      for (const enginePluginId of engine.subscriptions) {
+        dataBus.emit("sourceHealthChanged", {
+          pluginId: toRegistryPluginId(enginePluginId),
+          patch: {
+            status: "loading",
+            sourceType: "ws",
+            sourceUrl: engineUrl,
+            lastAttemptAt: Date.now(),
+            lastErrorMessage: null,
+          },
+        });
+      }
     };
 
     engine.ws.onmessage = (event) => {
@@ -92,6 +100,18 @@ class WebSocketClient {
 
     engine.ws.onerror = () => {
       console.warn(`[WSClient] Connection to ${engineUrl} failed. Retrying in background...`);
+      for (const enginePluginId of engine.subscriptions) {
+        dataBus.emit("sourceHealthChanged", {
+          pluginId: toRegistryPluginId(enginePluginId),
+          patch: {
+            status: "degraded",
+            sourceType: "ws",
+            sourceUrl: engineUrl,
+            lastErrorAt: Date.now(),
+            lastErrorMessage: "WebSocket connection failed; retrying in background.",
+          },
+        });
+      }
     };
 
     engine.ws.onclose = () => {
@@ -113,13 +133,25 @@ class WebSocketClient {
         const delay = expDelay + Math.random() * RECONNECT_JITTER_MS;
         engine.reconnectAttempts++;
         console.warn(`[WSClient] Disconnected from ${engineUrl}. Reconnecting in ${Math.round(delay / 1000)}s (attempt ${engine.reconnectAttempts})...`);
+        for (const enginePluginId of engine.subscriptions) {
+          dataBus.emit("sourceHealthChanged", {
+            pluginId: toRegistryPluginId(enginePluginId),
+            patch: {
+              status: "degraded",
+              sourceType: "ws",
+              sourceUrl: engineUrl,
+              lastErrorAt: Date.now(),
+              lastErrorMessage: `WebSocket disconnected; reconnecting in ${Math.round(delay / 1000)}s.`,
+            },
+          });
+        }
         engine.reconnectTimer = setTimeout(() => this.connectEngine(engineUrl), delay);
       }
     };
   }
 
   private handleDataMessage(data: WsStreamPayload) {
-    const pluginId = normalizePluginId(data.pluginId!);
+    const pluginId = toRegistryPluginId(data.pluginId!);
     const plugin = pluginManager.getPlugin(pluginId)?.plugin;
     let finalEntities = data.payload as GeoEntity[];
     const existingEntities = useStore.getState().entitiesByPlugin[pluginId] || [];
@@ -127,8 +159,13 @@ class WebSocketClient {
     if (plugin && typeof (plugin as any).mapWebsocketPayload === "function") {
       finalEntities = (plugin as any).mapWebsocketPayload(data.payload, existingEntities);
     } else if (!Array.isArray(data.payload)) {
-      console.warn(`[WsClient] Payload for ${pluginId} is an object but no mapWebsocketPayload exists. Ignoring.`);
-      return;
+      const payload = data.payload as unknown as { items?: GeoEntity[]; data?: GeoEntity[] } | null;
+      const candidate = payload?.items ?? payload?.data;
+      if (!Array.isArray(candidate)) {
+        console.warn(`[WsClient] Payload for ${pluginId} is an object but no mapWebsocketPayload exists. Ignoring.`);
+        return;
+      }
+      finalEntities = candidate;
     } else {
       finalEntities = finalEntities.map((e) => ({
         ...e,
@@ -144,6 +181,16 @@ class WebSocketClient {
       pluginId,
       entities: finalEntities,
     });
+    dataBus.emit("sourceHealthChanged", {
+      pluginId,
+      patch: {
+        status: "healthy",
+        sourceType: "ws",
+        itemCount: finalEntities.length,
+        lastSuccessAt: Date.now(),
+        lastErrorMessage: null,
+      },
+    });
   }
 
   private send(engine: EngineConnection, msg: any) {
@@ -153,7 +200,8 @@ class WebSocketClient {
   }
 
   public subscribe(pluginId: string, engineUrl: string) {
-    console.debug(`[WSClient] 📡 Subscribing to ${pluginId} at ${engineUrl}`);
+    const enginePluginId = toEnginePluginId(pluginId);
+    console.debug(`[WSClient] 📡 Subscribing to ${pluginId} as ${enginePluginId} at ${engineUrl}`);
     const engine = this.getOrCreateEngine(engineUrl);
 
     // Cancel any pending cleanup
@@ -162,17 +210,27 @@ class WebSocketClient {
       engine.cleanupTimer = null;
     }
 
-    engine.subscriptions.add(pluginId);
+    engine.subscriptions.add(enginePluginId);
+    dataBus.emit("sourceHealthChanged", {
+      pluginId,
+      patch: {
+        status: "loading",
+        sourceType: "ws",
+        sourceUrl: engineUrl,
+        lastAttemptAt: Date.now(),
+      },
+    });
     this.connectEngine(engineUrl);
-    this.send(engine, { action: "subscribe", pluginId });
+    this.send(engine, { action: "subscribe", pluginId: enginePluginId });
   }
 
   public unsubscribe(pluginId: string, engineUrl: string) {
     const engine = this.engines.get(engineUrl);
     if (!engine) return;
 
-    engine.subscriptions.delete(pluginId);
-    this.send(engine, { action: "unsubscribe", pluginId });
+    const enginePluginId = toEnginePluginId(pluginId);
+    engine.subscriptions.delete(enginePluginId);
+    this.send(engine, { action: "unsubscribe", pluginId: enginePluginId });
 
     // If no more subscriptions for this engine, schedule cleanup
     if (engine.subscriptions.size === 0) {
