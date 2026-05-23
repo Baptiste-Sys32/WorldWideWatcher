@@ -117,7 +117,7 @@ Visit `http://localhost:3000` to see the live globe.
 .\run-windows.ps1
 ```
 
-You can also double-click `run-windows.cmd` from File Explorer. It starts the local Next.js server at `http://localhost:3000`.
+You can also double-click `run-windows.cmd` from File Explorer. The launcher checks for Node.js, pnpm, Docker Desktop, `.env`, and dependencies; it installs what it can with `winget`, starts the local database, starts the Next.js server, and opens `http://localhost:3000` or the next available localhost port. If Docker Desktop was just installed, Windows may ask you to finish Docker's first-run setup before running the launcher again.
 
 ## Project Structure
 
