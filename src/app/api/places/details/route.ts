@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
+import { getNominatimEndpoint } from "@/lib/places/nominatim";
 
 const cache = new Map<string, { data: unknown; expiresAt: number }>();
 const TTL_MS = 24 * 60 * 60 * 1000;
-const NOMINATIM_LOOKUP_URL = "https://nominatim.openstreetmap.org/lookup";
 
 function osmIdFromPlaceId(placeId: string): string | null {
     const match = placeId.match(/^osm:(node|way|relation):(\d+)$/);
@@ -60,7 +60,7 @@ export async function GET(request: Request) {
     });
 
     try {
-        const response = await fetch(`${NOMINATIM_LOOKUP_URL}?${params.toString()}`, {
+        const response = await fetch(`${getNominatimEndpoint("lookup")}?${params.toString()}`, {
             headers: {
                 Accept: "application/json",
                 "User-Agent": "WorldWideView/2.16 address-lookup",

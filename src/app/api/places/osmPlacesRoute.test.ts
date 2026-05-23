@@ -14,6 +14,27 @@ function jsonResponse(body: unknown, ok = true, status = 200) {
 describe("OSM places routes", () => {
     beforeEach(() => {
         vi.restoreAllMocks();
+        delete process.env.NOMINATIM_BASE_URL;
+    });
+
+    it("uses a configured Nominatim base URL", async () => {
+        process.env.NOMINATIM_BASE_URL = "https://geocoder.example.test/nominatim/";
+        vi.stubGlobal("fetch", vi.fn(async () => jsonResponse([])));
+
+        const response = await searchGET(new Request("http://localhost/api/places/search?input=custom-base-url"));
+
+        expect(response.status).toBe(200);
+        expect(fetch).toHaveBeenCalledWith(expect.stringContaining("https://geocoder.example.test/nominatim/search"), expect.any(Object));
+    });
+
+    it("reports provider failures for address lookup", async () => {
+        vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ error: "rate limited" }, false, 429)));
+
+        const response = await searchGET(new Request("http://localhost/api/places/search?input=rate-limit-case"));
+        const json = await response.json();
+
+        expect(response.status).toBe(502);
+        expect(json.error).toBe("Failed to fetch address predictions");
     });
 
     it("returns Nominatim search predictions without API keys", async () => {

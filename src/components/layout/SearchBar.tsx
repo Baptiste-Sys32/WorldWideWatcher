@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useRef } from "react";
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { useIsMobile } from "@/core/hooks/useIsMobile";
 import { useSearch } from "./useSearch";
 
@@ -55,7 +55,7 @@ export function SearchBar() {
     const {
         query, setQuery, isOpen, setIsOpen,
         sections, selectedIndex, setSelectedIndex,
-        flatResults, handleSelect
+        flatResults, handleSelect, handleEnterSearch, lastSearchedPlace, clearLastSearchedPlace
     } = useSearch();
 
     const containerRef = useRef<HTMLDivElement>(null);
@@ -94,6 +94,17 @@ export function SearchBar() {
             return;
         }
 
+        const addressLikeQuery = /[\d,]/.test(query);
+        const selectedResult = flatResults[selectedIndex];
+        const selectedIsLocation = selectedResult
+            && (selectedResult.type === "address" || selectedResult.type === "place" || selectedResult.type === "country");
+
+        if (e.key === "Enter" && (!isOpen || flatResults.length === 0 || (addressLikeQuery && !selectedIsLocation))) {
+            e.preventDefault();
+            void handleEnterSearch();
+            return;
+        }
+
         if (!isOpen || flatResults.length === 0) return;
 
         if (e.key === "ArrowDown") {
@@ -104,7 +115,7 @@ export function SearchBar() {
             setSelectedIndex((prev) => (prev - 1 + flatResults.length) % flatResults.length);
         } else if (e.key === "Enter") {
             e.preventDefault();
-            handleSelect(flatResults[selectedIndex]);
+            if (selectedResult) void handleSelect(selectedResult);
         } else if (e.key === "Escape") {
             setIsOpen(false);
         }
@@ -152,6 +163,51 @@ export function SearchBar() {
           />
         </div>
 
+        {!query.trim() && lastSearchedPlace && (
+          <div
+            className="search-bar__last-place"
+            style={{
+                position: "absolute",
+                top: "calc(100% + 6px)",
+                left: 0,
+                maxWidth: "min(320px, 100vw - 24px)",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "5px 7px 5px 9px",
+                borderRadius: "var(--radius-full)",
+                background: "var(--bg-glass)",
+                border: "1px solid var(--border-subtle)",
+                color: "var(--text-secondary)",
+                fontSize: "0.72rem",
+                zIndex: 80,
+                boxShadow: "var(--glass-shadow)",
+            }}
+          >
+            <MapPinText label={lastSearchedPlace.label} />
+            <button
+              type="button"
+              onClick={clearLastSearchedPlace}
+              aria-label="Clear last searched place"
+              title="Clear"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 18,
+                height: 18,
+                border: 0,
+                borderRadius: "50%",
+                background: "transparent",
+                color: "var(--text-muted)",
+                cursor: "pointer",
+              }}
+            >
+              <X size={12} />
+            </button>
+          </div>
+        )}
+
         {isOpen && sections.length > 0 && (
           <div
             ref={dropdownRef}
@@ -192,6 +248,7 @@ export function SearchBar() {
                                         key={result.id}
                                         className="search-result-item"
                                         onClick={() => handleSelect(result)}
+                                        disabled={result.disabled}
                                         data-selected={isSelected}
                                         style={{
                                                 display: "flex",
@@ -204,7 +261,8 @@ export function SearchBar() {
                                                 border: "none",
                                                 borderRadius: "var(--radius-sm)",
                                                 color: "var(--text-main)",
-                                                cursor: "pointer",
+                                                cursor: result.disabled ? "default" : "pointer",
+                                                opacity: result.disabled ? 0.72 : 1,
                                                 textAlign: "left",
                                                 width: "100%"
                                             }}
@@ -265,5 +323,18 @@ export function SearchBar() {
         </div>
             )}
       </div>
+    );
+}
+
+function MapPinText({ label }: { label: string }) {
+    return (
+      <span style={{
+        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0
+      }}
+      >
+        Last searched:
+        {' '}
+        <strong style={{ color: "var(--text-primary)", fontWeight: 600 }}>{label}</strong>
+      </span>
     );
 }

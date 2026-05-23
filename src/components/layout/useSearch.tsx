@@ -40,6 +40,7 @@ export function useSearch() {
     const [isOpen, setIsOpen] = useState(false);
     const [liveSections, setLiveSections] = useState<SearchSection[]>([]);
     const [selectedIndex, setSelectedIndex] = useState(0);
+    const [lastSearchedPlace, setLastSearchedPlace] = useState<SearchResult | null>(null);
     const setCameraPosition = useStore((s) => s.setCameraPosition);
     const setSelectedEntity = useStore((s) => s.setSelectedEntity);
     const setActiveLayerPanelTab = useStore((s) => s.setActiveLayerPanelTab);
@@ -274,6 +275,7 @@ export function useSearch() {
     }, [query, setActiveBottomPanel, setActiveLayerPanelTab, setActiveRightOverlay, setConfigPanelOpen, setPlaybackMode]);
 
     const handleSelect = async (result: SearchResult) => {
+        if (result.disabled || result.type === "notice") return;
         if (result.type === "entity" || result.type === "place" || result.type === "address" || result.type === "country") {
             addToHistory(result);
         }
@@ -308,11 +310,40 @@ export function useSearch() {
                             duration: result.type === "address" ? 3.0 : 2.0,
                         });
                         setCameraPosition(data.lat, data.lon, distance);
+                        setLastSearchedPlace({
+                            ...result,
+                            label: data.name || result.label,
+                            subLabel: data.formattedAddress || result.subLabel,
+                            lat: data.lat,
+                            lon: data.lon,
+                        });
                     }
                 }
             } catch (err) {
                 console.error("Error fetching place details:", err);
             }
+        }
+    };
+
+    const handleEnterSearch = async () => {
+        if (!query.trim()) return;
+        const firstAddressResult = flatResults.find((result) => (
+            result.type === "address" || result.type === "place" || result.type === "country"
+        ) && !result.disabled);
+        if (firstAddressResult) {
+            await handleSelect(firstAddressResult);
+            return;
+        }
+
+        const locationSection = await searchLocations(query);
+        const firstLookupResult = locationSection?.results.find((result) => (
+            result.type === "address" || result.type === "place" || result.type === "country"
+        ) && !result.disabled);
+        if (firstLookupResult) {
+            await handleSelect(firstLookupResult);
+        } else if (locationSection) {
+            setLiveSections((prev) => [locationSection, ...prev.filter((section) => section.title !== locationSection.title)]);
+            setIsOpen(true);
         }
     };
 
@@ -326,6 +357,9 @@ selectedIndex,
 setSelectedIndex,
         flatResults,
 handleSelect,
+handleEnterSearch,
+lastSearchedPlace,
+clearLastSearchedPlace: () => setLastSearchedPlace(null),
 clearHistory,
     };
 }

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
+import { getNominatimEndpoint } from "@/lib/places/nominatim";
 
 const cache = new Map<string, { data: unknown; expiresAt: number }>();
 const TTL_MS = 60 * 60 * 1000;
 const MIN_QUERY_LENGTH = 3;
-const NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search";
 
 function classifyNominatimType(item: Record<string, unknown>): string[] {
     const category = String(item.category ?? "");
@@ -57,7 +57,7 @@ export async function GET(request: Request) {
     });
 
     try {
-        const response = await fetch(`${NOMINATIM_SEARCH_URL}?${params.toString()}`, {
+        const response = await fetch(`${getNominatimEndpoint("search")}?${params.toString()}`, {
             headers: {
                 Accept: "application/json",
                 "User-Agent": "WorldWideView/2.16 address-search",

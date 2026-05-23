@@ -8,8 +8,9 @@ export interface SearchResult {
     score: number;
     lat: number;
     lon: number;
-    type: "country" | "entity" | "place" | "address" | "layer" | "plugin" | "command" | "doctor";
+    type: "country" | "entity" | "place" | "address" | "layer" | "plugin" | "command" | "doctor" | "notice";
     resultLabel?: string;
+    disabled?: boolean;
     pluginId?: string;
     entity?: GeoEntity;
     placeCategory?: PlaceCategory;
