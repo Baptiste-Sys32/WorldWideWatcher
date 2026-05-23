@@ -59,6 +59,19 @@ function isDeclaredWebsocketPushOnly(plugin: WorldPlugin): boolean {
     return config?.transportMode === "websocket" && (config.pollingIntervalMs ?? plugin.getPollingInterval()) <= 0;
 }
 
+function shouldRunInitialFetch(plugin: WorldPlugin): boolean {
+    if (isDeclaredWebsocketPushOnly(plugin)) return false;
+    return plugin.getPollingInterval() <= 0;
+}
+
+function isStarlinkEntity(entity: GeoEntity): boolean {
+    return String(entity.properties?.orbitGroup ?? "").toLowerCase() === "starlink";
+}
+
+type EntitiesWithSourceHealth = GeoEntity[] & {
+    __wwvSourceHealthPatch?: Partial<SourceHealth>;
+};
+
 /**
  * ManagedPlugin represents the internal state and instance of a registered data source.
  * It wraps the raw WorldPlugin with system-level tracking for its enabled status,
@@ -323,7 +336,7 @@ class PluginManager {
         }
 
         pollingManager.start(pluginId);
-        if (managed.plugin.getPollingInterval() <= 0 && !isDeclaredWebsocketPushOnly(managed.plugin)) {
+        if (shouldRunInitialFetch(managed.plugin)) {
             void this.runInitialFetch(managed);
         }
         console.debug(`[PluginManager] Emitting layerToggled true for ${pluginId}. Total setup took ${(performance.now() - start).toFixed(2)}ms`);
@@ -571,19 +584,35 @@ class PluginManager {
     private handleDataUpdate(pluginId: string, entities: GeoEntity[]): void {
         const managed = this.plugins.get(pluginId);
         if (!managed) return;
-        const normalizedEntities = normalizeAviationEntities(pluginId, entities).map((entity) => ({
+        let normalizedEntities = normalizeAviationEntities(pluginId, entities).map((entity) => ({
             ...entity,
             pluginId,
         }));
+
+        const sourceHealthPatch = (entities as EntitiesWithSourceHealth).__wwvSourceHealthPatch;
+        const currentHealth = sourceHealthPatch ?? useStore.getState().sourceHealthByPlugin?.[pluginId];
+        const shouldPreserveStarlink = pluginId === "satellites"
+            && normalizedEntities.every((entity) => !isStarlinkEntity(entity))
+            && managed.entities.some(isStarlinkEntity)
+            && (currentHealth?.status === "degraded" || currentHealth?.status === "error" || currentHealth?.status === "stale");
+
+        if (shouldPreserveStarlink) {
+            const previousStarlink = managed.entities.filter(isStarlinkEntity);
+            normalizedEntities = [
+                ...normalizedEntities.filter((entity) => !isStarlinkEntity(entity)),
+                ...previousStarlink,
+            ];
+        }
         managed.entities = normalizedEntities;
 
         cacheLayer.set(pluginId, normalizedEntities, this.configCacheMaxAge);
         dataBus.emit("dataUpdated", { pluginId, entities: normalizedEntities });
         emitSourceHealth(managed.plugin, managed.context, {
-            status: "healthy",
+            status: shouldPreserveStarlink ? "degraded" : currentHealth?.status === "degraded" ? "degraded" : "healthy",
             itemCount: normalizedEntities.length,
             lastSuccessAt: Date.now(),
-            lastErrorMessage: null,
+            lastErrorMessage: currentHealth?.status === "degraded" ? currentHealth.lastErrorMessage ?? null : null,
+            sources: currentHealth?.sources,
         });
 
         // Clear loading indicator once first data arrives

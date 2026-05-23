@@ -28,15 +28,20 @@ import { pluginManager } from "./PluginManager";
  * heavy framework setup.
  */
 
+const mockStoreState = vi.hoisted(() => ({
+    state: {
+        setLayerLoading: () => {},
+        dataConfig: { pluginSettings: {}, pollingIntervals: {} },
+        sourceHealthByPlugin: {} as Record<string, { status: string; lastErrorMessage?: string | null }>,
+        isPlaybackMode: false,
+        currentTime: new Date(),
+        showErrorToast: undefined,
+    },
+}));
+
 vi.mock("@/core/state/store", () => ({
     useStore: {
-        getState: () => ({
-            setLayerLoading: () => {},
-            dataConfig: { pluginSettings: {}, pollingIntervals: {} },
-            isPlaybackMode: false,
-            currentTime: new Date(),
-            showErrorToast: undefined,
-        }),
+        getState: () => mockStoreState.state,
         subscribe: () => () => {},
     },
 }));
@@ -86,6 +91,7 @@ function makeEntity(id: string, pluginId: string): GeoEntity {
 
 beforeEach(() => {
     cacheLayer.clear();
+    mockStoreState.state.sourceHealthByPlugin = {};
 });
 
 afterEach(() => {
@@ -191,6 +197,62 @@ describe("PluginManager.enablePlugin", () => {
             });
         });
     });
+
+    it("runs one initial fetch for static or manual plugins with polling disabled", async () => {
+        const fetchSpy = vi.fn(async () => [makeEntity("static-1", "static-layer")]);
+        const dataHandler = vi.fn();
+        dataBus.on("dataUpdated", dataHandler);
+        await pluginManager.registerPlugin(makePlugin({
+            id: "static-layer",
+            fetch: fetchSpy,
+            getPollingInterval: () => 0,
+            getServerConfig: () => ({
+                apiBasePath: "/api/static-layer",
+                transportMode: "static",
+                pollingIntervalMs: 0,
+                sourceName: "Static Layer",
+            }),
+        }));
+
+        await pluginManager.enablePlugin("static-layer");
+
+        await vi.waitFor(() => {
+            expect(fetchSpy).toHaveBeenCalledTimes(1);
+        });
+        expect(dataHandler).toHaveBeenCalledWith({
+            pluginId: "static-layer",
+            entities: [expect.objectContaining({ id: "static-1", pluginId: "static-layer" })],
+        });
+    });
+
+    it("does not run an initial fetch for declared websocket push-only plugins", async () => {
+        const fetchSpy = vi.fn(async () => []);
+        const cachedEntities = [makeEntity("cached-ws", "ws-only")];
+        cacheLayer.set("ws-only", cachedEntities, 60_000);
+        const dataHandler = vi.fn();
+        dataBus.on("dataUpdated", dataHandler);
+        await pluginManager.registerPlugin(makePlugin({
+            id: "ws-only",
+            fetch: fetchSpy,
+            getPollingInterval: () => 0,
+            getServerConfig: () => ({
+                apiBasePath: "/api/ws-only",
+                transportMode: "websocket",
+                pollingIntervalMs: 0,
+                sourceName: "WS Only",
+            }),
+        }));
+
+        await pluginManager.enablePlugin("ws-only");
+
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(pluginManager.getEntities("ws-only")).toEqual(cachedEntities);
+        expect(dataHandler).toHaveBeenCalledWith({
+            pluginId: "ws-only",
+            entities: cachedEntities,
+        });
+    });
 });
 
 describe("PluginManager.disablePlugin", () => {
@@ -208,6 +270,55 @@ describe("PluginManager.disablePlugin", () => {
         expect(pluginManager.getEntities("dis-1")).toEqual([]);
         expect(layerHandler).toHaveBeenCalledWith({ pluginId: "dis-1", enabled: false });
         expect(dataHandler).toHaveBeenCalledWith({ pluginId: "dis-1", entities: [] });
+    });
+});
+
+describe("PluginManager satellite partial refresh handling", () => {
+    it("preserves loaded Starlink entities when a degraded refresh omits Starlink", async () => {
+        const dataHandler = vi.fn();
+        dataBus.on("dataUpdated", dataHandler);
+        const plugin = makePlugin({
+            id: "satellites",
+            fetch: async () => [makeEntity("iss-next", "satellites")],
+            getPollingInterval: () => 300_000,
+        });
+        await pluginManager.registerPlugin(plugin);
+        await pluginManager.enablePlugin("satellites");
+
+        const managed = pluginManager.getPlugin("satellites");
+        managed?.context.onDataUpdate([
+            { ...makeEntity("iss", "satellites"), properties: { orbitGroup: "stations" } },
+            { ...makeEntity("starlink-1", "satellites"), properties: { orbitGroup: "starlink" } },
+        ]);
+        mockStoreState.state.sourceHealthByPlugin = {
+            satellites: { status: "degraded", lastErrorMessage: "CelesTrak starlink failed" },
+        };
+
+        await pluginManager.fetchForPlugin("satellites", { start: new Date(0), end: new Date(1) });
+
+        expect(pluginManager.getEntities("satellites").map((entity) => entity.id)).toEqual(["iss-next", "starlink-1"]);
+        expect(dataHandler).toHaveBeenLastCalledWith({
+            pluginId: "satellites",
+            entities: [
+                expect.objectContaining({ id: "iss-next" }),
+                expect.objectContaining({ id: "starlink-1" }),
+            ],
+        });
+    });
+
+    it("clears Starlink entities when the satellite layer is disabled", async () => {
+        const dataHandler = vi.fn();
+        await pluginManager.registerPlugin(makePlugin({ id: "satellites" }));
+        await pluginManager.enablePlugin("satellites");
+        pluginManager.getPlugin("satellites")?.context.onDataUpdate([
+            { ...makeEntity("starlink-1", "satellites"), properties: { orbitGroup: "starlink" } },
+        ]);
+        dataBus.on("dataUpdated", dataHandler);
+
+        pluginManager.disablePlugin("satellites");
+
+        expect(pluginManager.getEntities("satellites")).toEqual([]);
+        expect(dataHandler).toHaveBeenCalledWith({ pluginId: "satellites", entities: [] });
     });
 });
 

@@ -24,9 +24,20 @@ declare global {
 
 const R_WGS84_MIN = 6356752.0;
 const R2 = R_WGS84_MIN * R_WGS84_MIN;
+const HIGH_ALTITUDE_HORIZON_CULL_METERS = 100_000;
+const scratchHorizonPosition = new Cartesian3();
 
 /** Interval (in frames) between horizon-culling passes for static entities. */
 const STATIC_HORIZON_INTERVAL = 30;
+
+function getHorizonCullPosition(item: AnimatableItem, posRef: Cartesian3): Cartesian3 {
+    const altitude = item.entity.altitude ?? 0;
+    if (item.entity.pluginId === "satellites" || altitude >= HIGH_ALTITUDE_HORIZON_CULL_METERS) {
+        Cartesian3.normalize(posRef, scratchHorizonPosition);
+        return Cartesian3.multiplyByScalar(scratchHorizonPosition, R_WGS84_MIN, scratchHorizonPosition);
+    }
+    return posRef;
+}
 
 // ── DOD: Pre-sorted entity buckets ──────────────────────────
 interface AnimationBuckets {
@@ -68,6 +79,7 @@ export function createUpdateLoop(
     let prevHoveredId: string | null = null;
     let prevAnyExpanded = false;
     let prevStackVersion = -1;
+    let prevCullCameraPosition: Cartesian3 | null = null;
 
     let lastPerfTime = performance.now();
     let smoothedSimMs = Date.now();
@@ -145,6 +157,10 @@ export function createUpdateLoop(
         const anyExpanded = isAnyStackExpanded();
 
         let forceFullPass = false;
+        if (!prevCullCameraPosition || !Cartesian3.equalsEpsilon(camPos, prevCullCameraPosition, 1, 1)) {
+            forceFullPass = true;
+            prevCullCameraPosition = Cartesian3.clone(camPos, prevCullCameraPosition ?? new Cartesian3());
+        }
 
         const currentStackVersion = getStackStateVersion();
         if (currentStackVersion !== prevStackVersion) {
@@ -243,7 +259,7 @@ isFaded: boolean
 
     if (!item.options.disableManualHorizonCulling || primitive.disableDepthTestDistance === Number.POSITIVE_INFINITY) {
         // Mathematical horizon culling (extremely fast, precise for sphere)
-        item._occluded = Cartesian3.dot(posRef, camPos) <= R2;
+        item._occluded = Cartesian3.dot(getHorizonCullPosition(item, posRef), camPos) <= R2;
         if (item._occluded) {
             if (primitive.show !== false) primitive.show = false;
             hideLabel(item, labelsCollection);
