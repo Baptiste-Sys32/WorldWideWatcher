@@ -36,6 +36,23 @@ interface PluginIconProps {
  */
 export function PluginIcon({ icon, size = 18, color }: PluginIconProps) {
     if (typeof icon === "string") {
+        if (icon.startsWith("data:image/") || icon.startsWith("http://") || icon.startsWith("https://") || icon.startsWith("/")) {
+            return (
+              <img
+                src={icon}
+                alt=""
+                width={size}
+                height={size}
+                style={{
+                    width: size,
+                    height: size,
+                    display: "block",
+                    objectFit: "contain",
+                }}
+              />
+            );
+        }
+
         const Resolved = icons[icon as keyof typeof icons] as LucideIcon | undefined;
         if (Resolved) return <Resolved size={size} color={color} />;
         // Treat as emoji or text fallback

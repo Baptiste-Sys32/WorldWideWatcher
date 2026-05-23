@@ -35,9 +35,18 @@ import { isDemo } from "@/core/edition";
 
 import { injectHostGlobals } from "@/core/plugins/hostGlobals";
 import { initLogCatcher } from "@/lib/logCatcher";
+import "@/plugins/globalFeeds";
+import { BUILT_IN_GLOBAL_FEED_IDS } from "@/plugins/globalFeeds/types";
+import "@/plugins/weather/weatherOverlayPlugins";
+import { WEATHER_OVERLAY_PLUGIN_IDS } from "@/plugins/weather/weatherOverlayPlugins";
 import { AgentBusSubscriber } from "./AgentBusSubscriber";
 import { DataBusSubscriber } from "./DataBusSubscriber";
 import { Header } from "./Header";
+
+const DEFAULT_DISABLED_BUILT_INS = new Set<string>([
+    ...BUILT_IN_GLOBAL_FEED_IDS,
+    ...WEATHER_OVERLAY_PLUGIN_IDS,
+]);
 
 const GlobeView = dynamic(() => import("@/core/globe/GlobeView"), {
     ssr: false,
@@ -113,7 +122,8 @@ export function AppShell() {
                 if (isDemo) {
                     shouldEnable = demoDefaultPlugins.has(plugin.id);
                 } else {
-                    shouldEnable = !disabledIds.has(plugin.id);
+                    shouldEnable = !disabledIds.has(plugin.id)
+                        && !DEFAULT_DISABLED_BUILT_INS.has(plugin.id);
                 }
                 initLayer(plugin.id, shouldEnable);
                 if (shouldEnable) {

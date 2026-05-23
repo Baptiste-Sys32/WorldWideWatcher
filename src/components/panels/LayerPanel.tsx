@@ -21,6 +21,7 @@ import { useResizablePanel } from "@/core/hooks/useResizablePanel";
 import { pluginManager } from "@/core/plugins/PluginManager";
 import { useStore } from "@/core/state/store";
 import { trackEvent } from "@/lib/analytics";
+import { WEATHER_OVERLAY_PLUGIN_IDS, type WeatherOverlayPluginId } from "@/plugins/weather/weatherOverlayPlugins";
 import { LocalSettingsTab } from "./DataConfig/LocalSettingsTab";
 import { ImageryPicker } from "./ImageryPicker";
 import { LayerItem } from "./LayerItem";
@@ -37,8 +38,15 @@ const CATEGORY_LABELS: Record<string, string> = {
     infrastructure: "Infrastructure",
     cyber: "Cyber",
     economic: "Economic",
+    weather: "Weather",
     custom: "Custom",
 };
+
+const WEATHER_PLUGIN_IDS = new Set<string>(WEATHER_OVERLAY_PLUGIN_IDS);
+
+function isWeatherPluginId(pluginId: string): pluginId is WeatherOverlayPluginId {
+    return WEATHER_PLUGIN_IDS.has(pluginId);
+}
 
 type LeftPanelTab = "data" | "imagery" | "plugins" | "settings";
 type PrimaryPanelTab = Exclude<LeftPanelTab, "settings">;
@@ -52,7 +60,7 @@ const PANEL_TAB_META: Record<PrimaryPanelTab, { label: string; Icon: typeof Circ
 
 export function LayerPanel() {
     const isMobile = useIsMobile();
-    const { width, startResizing } = useResizablePanel(340, 280, 560, "left");
+    const { width, startResizing } = useResizablePanel(390, 320, 680, "left");
     const leftSidebarOpen = useStore((s) => s.leftSidebarOpen);
     const openMobilePanel = useStore((s) => s.openMobilePanel);
     const activeTab = useStore((s) => s.activeLayerPanelTab);
@@ -65,6 +73,7 @@ export function LayerPanel() {
     const setHighlightLayerId = useStore((s) => s.setHighlightLayerId);
     const setConfigPanelOpen = useStore((s) => s.setConfigPanelOpen);
     const setSelectedEntity = useStore((s) => s.setSelectedEntity);
+    const updateMapConfig = useStore((s) => s.updateMapConfig);
 
     const [searchQuery, setSearchQuery] = useState("");
     const allPlugins = pluginManager.getAllPlugins();
@@ -118,7 +127,20 @@ export function LayerPanel() {
             if (state.selectedEntity?.pluginId === pluginId) {
                 state.setSelectedEntity(null);
             }
+            if (isWeatherPluginId(pluginId)) {
+                updateMapConfig({ weatherOverlay: null });
+            }
         } else {
+            if (isWeatherPluginId(pluginId)) {
+                for (const weatherPluginId of WEATHER_OVERLAY_PLUGIN_IDS) {
+                    if (weatherPluginId === pluginId) continue;
+                    pluginManager.disablePlugin(weatherPluginId);
+                    useStore.getState().setLayerEnabled(weatherPluginId, false);
+                    useStore.getState().clearEntities(weatherPluginId);
+                    useStore.getState().setEntityCount(weatherPluginId, 0);
+                }
+                updateMapConfig({ weatherOverlay: pluginId });
+            }
             pluginManager.enablePlugin(pluginId);
             useStore.getState().setLayerEnabled(pluginId, true);
             useStore.getState().setHighlightLayerId(pluginId);

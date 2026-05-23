@@ -7,35 +7,48 @@ import { GET } from "@/app/api/weather/layers/route";
 describe("/api/weather/layers", () => {
     beforeEach(() => {
         vi.restoreAllMocks();
+        vi.unstubAllEnvs();
     });
 
-    it("returns available layers with tile URL when configured", async () => {
-        vi.stubEnv("OPENWEATHERMAP_API_KEY", "test-key-123");
+    it("returns OpenWeatherMap layers when a free API key is configured", async () => {
+        vi.stubEnv("OPENWEATHERMAP_API_KEY", "free-key");
 
         const response = await GET();
         const json = await response.json();
 
         expect(response.status).toBe(200);
         expect(json.configured).toBe(true);
+        expect(json.requiresApiKey).toBe(false);
+        expect(json.usesApiKey).toBe(true);
+        expect(json.freeTier).toBe(true);
+        expect(json.provider).toBe("RainViewer / OpenWeatherMap / Open-Meteo");
+        expect(json.fallbackProvider).toBe("Open-Meteo");
         expect(json.tileUrlTemplate).toBe("/api/weather/tile/{z}/{x}/{y}?layer={layer}");
-        expect(json.layers).toHaveLength(5);
+        expect(json.layers.map((layer: { id: string }) => layer.id)).toEqual([
+            "weather-temperature",
+            "weather-precipitation",
+            "weather-clouds",
+            "weather-wind",
+        ]);
     });
 
-    it("returns configured=false and null tile URL when key is missing", async () => {
+    it("falls back to no-key Open-Meteo layers without an API key", async () => {
         vi.stubEnv("OPENWEATHERMAP_API_KEY", "");
 
         const response = await GET();
         const json = await response.json();
 
         expect(response.status).toBe(200);
-        expect(json.configured).toBe(false);
-        expect(json.tileUrlTemplate).toBeNull();
+        expect(json.configured).toBe(true);
+        expect(json.requiresApiKey).toBe(false);
+        expect(json.usesApiKey).toBe(false);
+        expect(json.provider).toBe("RainViewer / Open-Meteo");
+        expect(json.tileUrlTemplate).toBe("/api/weather/tile/{z}/{x}/{y}?layer={layer}");
         expect(json.layers.map((layer: { id: string }) => layer.id)).toEqual([
-            "clouds_new",
-            "precipitation_new",
-            "pressure_new",
-            "wind_new",
-            "temp_new",
+            "weather-temperature",
+            "weather-precipitation",
+            "weather-clouds",
+            "weather-wind",
         ]);
     });
 });

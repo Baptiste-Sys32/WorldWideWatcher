@@ -1,21 +1,19 @@
 import { NextResponse } from "next/server";
+import { WEATHER_LAYERS } from "@/plugins/weather/weatherLayers";
 
 export const revalidate = 3600;
 
-const LAYERS = [
-    { id: "clouds_new", name: "Clouds", description: "Cloud coverage" },
-    { id: "precipitation_new", name: "Precipitation", description: "Rain and snow" },
-    { id: "pressure_new", name: "Sea Level Pressure", description: "Atmospheric pressure" },
-    { id: "wind_new", name: "Wind Speed", description: "Wind speed and direction" },
-    { id: "temp_new", name: "Temperature", description: "Surface temperature" },
-];
-
 export async function GET() {
-    const configured = Boolean(process.env.OPENWEATHERMAP_API_KEY);
+    const usesApiKey = Boolean(process.env.OPENWEATHERMAP_API_KEY?.trim());
 
     return NextResponse.json({
-        configured,
-        tileUrlTemplate: configured ? "/api/weather/tile/{z}/{x}/{y}?layer={layer}" : null,
-        layers: LAYERS,
+        configured: true,
+        provider: usesApiKey ? "RainViewer / OpenWeatherMap / Open-Meteo" : "RainViewer / Open-Meteo",
+        requiresApiKey: false,
+        usesApiKey,
+        freeTier: true,
+        fallbackProvider: "Open-Meteo",
+        tileUrlTemplate: "/api/weather/tile/{z}/{x}/{y}?layer={layer}",
+        layers: WEATHER_LAYERS,
     });
 }
