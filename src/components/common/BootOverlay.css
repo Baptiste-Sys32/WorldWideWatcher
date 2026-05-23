@@ -3,111 +3,157 @@
     position: fixed;
     inset: 0;
     z-index: 9999;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    background: var(--bg-primary);
-    transition: opacity 800ms var(--ease-smooth),
-                transform 600ms var(--ease-smooth);
+    overflow: hidden;
+    background: #000;
+    color: #e8e8e8;
+    transition: opacity 520ms steps(6, end),
+                visibility 0s linear 520ms;
 }
 
 .boot-overlay--hidden {
     visibility: hidden;
     opacity: 0;
-    transform: scale(1.04);
     pointer-events: none;
-    transition: opacity 800ms var(--ease-smooth),
-                transform 600ms var(--ease-smooth),
-                visibility 0s linear 800ms;
 }
 
-/* ─── Orbital rings ──────────────────────────────────────── */
-.boot-overlay__rings {
-    position: relative;
-    width: 160px;
-    height: 160px;
-    margin-bottom: var(--space-2xl);
-}
-
-.boot-overlay__ring {
+.boot-overlay__crt {
     position: absolute;
     inset: 0;
-    border-radius: 50%;
-    border: 1.5px dashed transparent;
+    pointer-events: none;
+    background:
+        linear-gradient(rgba(255, 255, 255, 0.05) 50%, rgba(0, 0, 0, 0.16) 50%),
+        radial-gradient(ellipse at center, transparent 58%, rgba(0, 0, 0, 0.62) 100%);
+    background-size: 100% 4px, 100% 100%;
+    opacity: 0.38;
 }
 
-.boot-overlay__ring--1 {
-    inset: 0;
-    border-color: rgba(var(--accent-rgb), 0.4);
-    animation: orbitSpin 6s linear infinite;
-}
-
-.boot-overlay__ring--2 {
-    inset: 20px;
-    border-color: rgba(59, 130, 246, 0.35);
-    animation: orbitSpin 4s linear infinite reverse;
-}
-
-.boot-overlay__ring--3 {
-    inset: 40px;
-    border-color: rgba(167, 139, 250, 0.3);
-    animation: orbitSpin 8s linear infinite;
-}
-
-@keyframes orbitSpin {
-    to { transform: rotate(360deg); }
-}
-
-/* Central pulsing glow */
-.boot-overlay__core {
+.boot-overlay__terminal {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 12px;
-    height: 12px;
-    transform: translate(-50%, -50%);
-    border-radius: 50%;
-    background: var(--accent-cyan);
-    box-shadow: 0 0 20px rgba(var(--accent-rgb), 0.6),
-                0 0 60px rgba(var(--accent-rgb), 0.3);
-    animation: corePulse 2s ease-in-out infinite;
-}
-
-@keyframes corePulse {
-    0%, 100% { transform: translate(-50%, -50%) scale(1);   opacity: 1; }
-    50%      { transform: translate(-50%, -50%) scale(1.4); opacity: 0.7; }
-}
-
-/* ─── Text ───────────────────────────────────────────────── */
-.boot-overlay__title {
-    font-family: var(--font-ui);
-    font-size: 22px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    animation: hudFlickerIn 1.2s var(--ease-smooth) both;
-}
-
-.boot-overlay__status {
-    margin-top: var(--space-sm);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-muted);
-    letter-spacing: 0.12em;
+    inset: 0;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 16px;
+    padding: clamp(14px, 2.6vw, 36px);
+    font-family: var(--font-mono), "Courier New", monospace;
     text-transform: uppercase;
-    animation: hudFlickerIn 1.2s var(--ease-smooth) 0.4s both;
 }
 
-@keyframes hudFlickerIn {
-    0%   { opacity: 0; }
-    15%  { opacity: 0.7; }
-    30%  { opacity: 0.2; }
-    50%  { opacity: 0.9; }
-    70%  { opacity: 0.4; }
-    85%  { opacity: 1; }
-    100% { opacity: 1; }
+.boot-overlay__brand {
+    margin: 0;
+    overflow: hidden;
+    color: #35d7ff;
+    font-family: "Courier New", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: clamp(7px, 1.02vw, 16px);
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1;
+    white-space: pre;
+    text-shadow:
+        1px 0 0 #ff36d0,
+        -1px 0 0 #2eff9a,
+        0 0 12px rgba(53, 215, 255, 0.32);
+    animation: bootTitleIn 420ms steps(3, end) both;
+}
+
+.boot-overlay__log-viewport {
+    min-height: 0;
+    overflow: hidden;
+}
+
+.boot-overlay__log {
+    width: min(1040px, 100%);
+    display: grid;
+    gap: 3px;
+    color: #e8e8e8;
+    font-family: "Courier New", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: clamp(10px, 1.12vw, 15px);
+    line-height: 1.16;
+    animation: bootLogScroll 7.5s linear both;
+}
+
+.boot-overlay__line {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 12px;
+    min-width: 0;
+    opacity: 0;
+    animation: bootLineIn 60ms steps(1, end) forwards;
+    animation-delay: calc(var(--line-index) * 0.075s);
+}
+
+.boot-overlay__line-prefix {
+    color: #8b8b8b;
+}
+
+.boot-overlay__cursor-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 4px;
+    color: #e8e8e8;
+    opacity: 0;
+    animation: bootLineIn 60ms steps(1, end) 4.1s forwards;
+}
+
+.boot-overlay__cursor {
+    width: 9px;
+    height: 15px;
+    background: #e8e8e8;
+    animation: bootCursor 650ms steps(1, end) infinite;
+}
+
+.boot-overlay--fallback {
+    background: #000;
+}
+
+@keyframes bootTitleIn {
+    0% {
+        opacity: 0;
+        filter: brightness(2.5);
+    }
+    30% { opacity: 1; }
+    42% { opacity: 0.22; }
+    54%, 100% {
+        opacity: 1;
+        filter: brightness(1);
+    }
+}
+
+@keyframes bootLineIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes bootLogScroll {
+    0%, 24% {
+        transform: translateY(0);
+    }
+    100% {
+        transform: translateY(-34%);
+    }
+}
+
+@keyframes bootCursor {
+    0%, 46% { opacity: 1; }
+    47%, 100% { opacity: 0; }
+}
+
+@media (max-width: 780px) {
+    .boot-overlay__terminal {
+        gap: 12px;
+        padding: 14px;
+    }
+
+    .boot-overlay__brand {
+        font-size: clamp(5px, 1.75vw, 10px);
+    }
+
+    .boot-overlay__line {
+        grid-template-columns: 34px minmax(0, 1fr);
+        gap: 8px;
+    }
 }
