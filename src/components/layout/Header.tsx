@@ -21,6 +21,7 @@ import {
 
 import { DEMO_ADMIN_ROLE, isDemo } from "@/core/edition";
 import { useIsMobile } from "@/core/hooks/useIsMobile";
+import { pluginManager } from "@/core/plugins/PluginManager";
 import { useStore } from "@/core/state/store";
 import { trackEvent } from "@/lib/analytics";
 import { SearchBar } from "./SearchBar";
@@ -51,19 +52,32 @@ export function Header() {
 
     const [isDemoAdmin, setIsDemoAdmin] = useState(false);
     const [themeOpen, setThemeOpen] = useState(false);
+    const [layersPopoverOpen, setLayersPopoverOpen] = useState(false);
     const previousLeftTabRef = useRef<"data" | "imagery" | "plugins">("data");
     const themeButtonRef = useRef<HTMLButtonElement>(null);
+    const layerHoldTimerRef = useRef<number | null>(null);
     const [themePos, setThemePos] = useState({ top: 0, right: 0 });
     const layerStatus = useMemo(() => {
         const enabledIds = Object.entries(layers)
             .filter(([, layer]) => layer.enabled)
             .map(([pluginId]) => pluginId);
-        const problemCount = enabledIds.filter((pluginId) => {
+        const problemIds = enabledIds.filter((pluginId) => {
             const status = sourceHealthByPlugin[pluginId]?.status;
             return status === "degraded" || status === "error" || status === "stale";
-        }).length;
-        return { enabledCount: enabledIds.length, problemCount };
+        });
+        const problemNames = problemIds.map((pluginId) => pluginManager.getPlugin(pluginId)?.plugin.name ?? pluginId);
+        return { enabledCount: enabledIds.length, problemCount: problemIds.length, problemNames };
     }, [layers, sourceHealthByPlugin]);
+    const enabledLayerItems = useMemo(() => Object.entries(layers)
+        .filter(([, layer]) => layer.enabled)
+        .map(([pluginId, layer]) => ({
+            pluginId,
+            layer,
+            name: pluginManager.getPlugin(pluginId)?.plugin.name ?? pluginId,
+            status: sourceHealthByPlugin[pluginId]?.status ?? "idle",
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)), [layers, sourceHealthByPlugin]);
+    const layerHealthTitle = `${layerStatus.enabledCount} enabled layer${layerStatus.enabledCount === 1 ? "" : "s"}${layerStatus.problemNames.length > 0 ? `; needs attention: ${layerStatus.problemNames.join(", ")}` : ""}`;
 
     useEffect(() => {
         if (!isDemo) return;
@@ -96,6 +110,32 @@ export function Header() {
         openLeftTab("data");
         focusLayerSearch();
         trackEvent("panel-tab-switch", { tab: "data" });
+    };
+
+    const toggleLayerFromPopover = (pluginId: string, enabled: boolean) => {
+        const state = useStore.getState();
+        if (enabled) {
+            pluginManager.disablePlugin(pluginId);
+            state.setLayerEnabled(pluginId, false);
+            state.clearEntities(pluginId);
+            state.setEntityCount(pluginId, 0);
+        } else {
+            void pluginManager.enablePlugin(pluginId);
+            state.setLayerEnabled(pluginId, true);
+        }
+        state.setHighlightLayerId(pluginId);
+    };
+
+    const startLayerHold = () => {
+        if (layerHoldTimerRef.current !== null) window.clearTimeout(layerHoldTimerRef.current);
+        layerHoldTimerRef.current = window.setTimeout(() => setLayersPopoverOpen(true), 450);
+    };
+
+    const clearLayerHold = () => {
+        if (layerHoldTimerRef.current !== null) {
+            window.clearTimeout(layerHoldTimerRef.current);
+            layerHoldTimerRef.current = null;
+        }
     };
 
     const toggleSettings = () => {
@@ -154,23 +194,68 @@ export function Header() {
                   <Map size={14} />
                   <span>Map</span>
                 </button>
-                <button
-                  type="button"
-                  className={`btn btn--flat header-layer-btn ${activeLayerPanelTab === "data" && leftSidebarOpen ? "btn--active" : ""}`}
-                  onClick={toggleLayersPanel}
-                  title={`${activeLayerPanelTab === "data" && leftSidebarOpen ? "Hide" : "Open"} data layers`}
+                <div
+                  className="header-layer-popover-anchor"
+                  onMouseEnter={() => setLayersPopoverOpen(true)}
+                  onMouseLeave={() => { clearLayerHold(); setLayersPopoverOpen(false); }}
+                  onFocus={() => setLayersPopoverOpen(true)}
+                  onBlur={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setLayersPopoverOpen(false);
+                  }}
                 >
-                  <Layers size={14} />
-                  <span>Layers</span>
-                  {layerStatus.enabledCount > 0 && (
-                    <span
-                      className={`header-layer-btn__badge ${layerStatus.problemCount > 0 ? "header-layer-btn__badge--warn" : ""}`}
-                      title={`${layerStatus.enabledCount} enabled layer${layerStatus.enabledCount === 1 ? "" : "s"}${layerStatus.problemCount > 0 ? `, ${layerStatus.problemCount} need attention` : ""}`}
-                    >
-                      {layerStatus.problemCount > 0 ? `${layerStatus.enabledCount}/${layerStatus.problemCount}` : layerStatus.enabledCount}
-                    </span>
+                  <button
+                    type="button"
+                    className={`btn btn--flat header-layer-btn ${activeLayerPanelTab === "data" && leftSidebarOpen ? "btn--active" : ""}`}
+                    onClick={toggleLayersPanel}
+                    onPointerDown={startLayerHold}
+                    onPointerUp={clearLayerHold}
+                    onPointerCancel={clearLayerHold}
+                    title={`${activeLayerPanelTab === "data" && leftSidebarOpen ? "Hide" : "Open"} data layers`}
+                  >
+                    <Layers size={14} />
+                    <span>Layers</span>
+                    {layerStatus.enabledCount > 0 && (
+                      <span
+                        className={`header-layer-btn__badge ${layerStatus.problemCount > 0 ? "header-layer-btn__badge--warn" : ""}`}
+                        title={layerHealthTitle}
+                      >
+                        {layerStatus.problemCount > 0 ? `${layerStatus.enabledCount}/${layerStatus.problemCount}` : layerStatus.enabledCount}
+                      </span>
+                    )}
+                  </button>
+                  {layersPopoverOpen && (
+                    <div className="header-layer-popover" role="menu" aria-label="Enabled layers">
+                      <div className="header-layer-popover__title">Enabled layers</div>
+                      {enabledLayerItems.length === 0 ? (
+                        <div className="header-layer-popover__empty">No active layers</div>
+                      ) : enabledLayerItems.slice(0, 8).map((item) => {
+                        const isProblem = item.status === "degraded" || item.status === "error" || item.status === "stale";
+                        return (
+                          <button
+                            key={item.pluginId}
+                            type="button"
+                            className="header-layer-popover__item"
+                            onClick={() => toggleLayerFromPopover(item.pluginId, item.layer.enabled)}
+                            role="menuitemcheckbox"
+                            aria-checked={item.layer.enabled}
+                          >
+                            <span className={`header-layer-popover__dot ${isProblem ? "header-layer-popover__dot--warn" : ""}`} />
+                            <span className="header-layer-popover__name">{item.name}</span>
+                            <span className="header-layer-popover__toggle">On</span>
+                          </button>
+                        );
+                      })}
+                      {enabledLayerItems.length > 8 && (
+                        <div className="header-layer-popover__more">
+                          +
+                          {enabledLayerItems.length - 8}
+                          {' '}
+                          more
+                        </div>
+                      )}
+                    </div>
                   )}
-                </button>
+                </div>
                 <button
                   type="button"
                   className={`btn btn--flat ${activeRightOverlay === "filters" ? "btn--active" : ""}`}

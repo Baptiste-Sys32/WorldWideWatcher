@@ -9,6 +9,7 @@
 "use client";
 
 import React, { useEffect } from "react";
+import { RotateCcw } from "lucide-react";
 import { useStore } from "@/core/state/store";
 import { trackEvent } from "@/lib/analytics";
 import "./graphics-settings.css";
@@ -45,6 +46,8 @@ const AA_OPTIONS = [
     { label: "MSAA 4× (Quality)", value: "msaa4x" },
     { label: "MSAA 8× (Ultra)", value: "msaa8x" },
 ];
+
+const DEFAULT_OSM_BUILDING_ALIGNMENT_METERS = -120;
 
 /**
  * @component GraphicsSettings
@@ -162,8 +165,22 @@ export function GraphicsSettings() {
 
         <div className="gfx-settings__row gfx-settings__row--stacked">
           <div className="gfx-settings__label-line">
-            <span className="gfx-settings__label">Building Height Offset</span>
-            <span className="gfx-settings__hint">Advanced</span>
+            <span className="gfx-settings__label">3D Building Alignment</span>
+            <button
+              type="button"
+              className="gfx-settings__icon-btn"
+              onClick={() => {
+                            update({ osmBuildingsHeightOffsetMeters: DEFAULT_OSM_BUILDING_ALIGNMENT_METERS });
+                            trackEvent("graphics-setting", {
+                                key: "osmBuildingsHeightOffsetMeters",
+                                value: DEFAULT_OSM_BUILDING_ALIGNMENT_METERS,
+                            });
+                        }}
+              aria-label="Reset 3D building alignment"
+              title="Reset 3D building alignment"
+            >
+              <RotateCcw size={13} />
+            </button>
           </div>
           <div className="gfx-settings__slider-wrap gfx-settings__slider-wrap--wide">
             <input

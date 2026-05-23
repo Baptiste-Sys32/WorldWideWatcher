@@ -86,7 +86,6 @@ export function AppShell() {
     useEffect(() => {
         const startPlatform = async () => {
             initLogCatcher();
-            console.log("[AppShell] Initializing Platform...");
 
             // Inject host libraries for dynamic plugin loading
             await injectHostGlobals();
@@ -131,7 +130,6 @@ export function AppShell() {
                 }
             }
 
-            console.log("[AppShell] Platform Ready. Waiting for globe tiles...");
         };
 
         // Guard so boot only starts once regardless of which trigger fires first.
@@ -139,7 +137,9 @@ export function AppShell() {
         const startBootOnce = (reason: string) => {
             if (bootStarted) return;
             bootStarted = true;
-            console.log(`[AppShell] Starting boot sequence (${reason}).`);
+            if (process.env.NODE_ENV === "development") {
+                console.debug(`[AppShell] Starting boot sequence (${reason}).`);
+            }
             boot.startBoot();
         };
 

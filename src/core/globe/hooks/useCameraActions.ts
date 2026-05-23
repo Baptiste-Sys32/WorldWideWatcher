@@ -12,7 +12,6 @@ export function useCameraActions(viewer: CesiumViewer | null, isReady: boolean) 
 
         const unsubFace = dataBus.on("cameraFaceTowards", ({ lat, lon, alt }) => {
             if (!viewer || viewer.isDestroyed()) return;
-            console.log("[GlobeView] Native faceTowards", lat, lon, alt);
             const target = Cartesian3.fromDegrees(lon, lat, alt);
             const offset = Cartesian3.subtract(
                 viewer.camera.positionWC,
