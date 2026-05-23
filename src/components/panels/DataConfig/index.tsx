@@ -94,6 +94,7 @@ export function DataConfigPanel() {
     const setTimeWindow = useStore((s) => s.setTimeWindow);
     const layers = useStore((s) => s.layers);
     const entitiesByPlugin = useStore((s) => s.entitiesByPlugin);
+    const sourceHealthByPlugin = useStore((s) => s.sourceHealthByPlugin);
 
     const isOpen = isMobile ? openMobilePanel === "right" : configPanelOpen;
     const enabledLayerIds = Object.keys(layers).filter((id) => layers[id]?.enabled);
@@ -107,6 +108,7 @@ export function DataConfigPanel() {
     const entityCount = pluginId
         ? ((entitiesByPlugin[pluginId] ?? []).length || layer?.entityCount || 0)
         : Object.values(layers).reduce((total, item) => total + (item.entityCount ?? 0), 0);
+    const sourceHealth = pluginId ? sourceHealthByPlugin[pluginId] : undefined;
 
     const selectedProps = selectedEntity
         ? Object.entries(selectedEntity.properties ?? {}).slice(0, 8)
@@ -298,6 +300,27 @@ export function DataConfigPanel() {
             <section className="inspector-card">
               <div className="inspector-card__title">Feed</div>
               <p>{managed.plugin.description}</p>
+            </section>
+          )}
+
+          {pluginId && sourceHealth && (
+            <section className={`status-card status-card--${
+                sourceHealth.status === "healthy" ? "ok"
+                    : sourceHealth.status === "error" ? "bad"
+                        : sourceHealth.status === "degraded" || sourceHealth.status === "stale" ? "warn"
+                            : "info"
+            }`}
+            >
+              <span className="status-card__title">Source</span>
+              <span className="status-card__text">
+                {(sourceHealth.sourceName ?? managed?.plugin.name ?? pluginId)}
+                {" · "}
+                {sourceHealth.status}
+                {typeof sourceHealth.itemCount === "number" ? ` · ${sourceHealth.itemCount.toLocaleString()} items` : ""}
+                {typeof sourceHealth.latencyMs === "number" ? ` · ${sourceHealth.latencyMs} ms` : ""}
+                {sourceHealth.lastSuccessAt ? ` · updated ${new Date(sourceHealth.lastSuccessAt).toLocaleTimeString()}` : ""}
+                {sourceHealth.lastErrorMessage ? ` · ${sourceHealth.lastErrorMessage}` : ""}
+              </span>
             </section>
           )}
 

@@ -16,6 +16,48 @@ import { resolveEngineUrl } from "@/core/data/resolveEngineUrl";
 import { fetchLocalEngineManifest } from "@/core/data/engineManifest";
 import { pluginRegistry } from "@/core/plugins/PluginRegistry";
 import { normalizeAviationEntities } from "@/core/data/normalizeAviationEntities";
+import type { SourceHealth, SourceType } from "@/core/state/sourceHealthSlice";
+import { applyFetchFallbacks } from "./sourceAdapters";
+
+function inferSourceType(plugin: WorldPlugin): SourceType {
+    const config = plugin.getServerConfig?.();
+    if (config?.transportMode === "websocket" || config?.streamUrl) return "ws";
+    if (config?.transportMode === "static") return "static";
+    if (config?.transportMode === "manual") return "static";
+    if (plugin.id.startsWith("tropical-")
+        || plugin.id.startsWith("flood-")
+        || plugin.id.startsWith("drought-")
+        || plugin.id.startsWith("disease-")) {
+        return "composite";
+    }
+    return "rest";
+}
+
+function getSourceName(plugin: WorldPlugin): string {
+    return plugin.getServerConfig?.()?.sourceName ?? plugin.name;
+}
+
+function getSourceUrl(plugin: WorldPlugin, context: PluginContext): string | undefined {
+    const config = plugin.getServerConfig?.();
+    return config?.sourceUrl ?? config?.apiBasePath ?? context.getEngineUrl();
+}
+
+function emitSourceHealth(plugin: WorldPlugin, context: PluginContext, patch: Partial<SourceHealth>): void {
+    dataBus.emit("sourceHealthChanged", {
+        pluginId: plugin.id,
+        patch: {
+            sourceName: getSourceName(plugin),
+            sourceUrl: getSourceUrl(plugin, context),
+            sourceType: inferSourceType(plugin),
+            ...patch,
+        },
+    });
+}
+
+function isDeclaredWebsocketPushOnly(plugin: WorldPlugin): boolean {
+    const config = plugin.getServerConfig?.();
+    return config?.transportMode === "websocket" && (config.pollingIntervalMs ?? plugin.getPollingInterval()) <= 0;
+}
 
 /**
  * ManagedPlugin represents the internal state and instance of a registered data source.
@@ -159,10 +201,20 @@ class PluginManager {
                     error instanceof TypeError && error.message === "Failed to fetch";
                 if (isNonFatalFetch) {
                     console.warn("[Plugin:%s] Non-fatal initial fetch failed (WS will deliver data): %s", plugin.id, error.message);
+                    emitSourceHealth(plugin, context, {
+                        status: "degraded",
+                        lastErrorAt: Date.now(),
+                        lastErrorMessage: error.message,
+                    });
                     return;
                 }
                 console.error("[Plugin:%s]", plugin.id, error);
                 trackEvent("plugin-error", { plugin: plugin.id, error: error.message });
+                emitSourceHealth(plugin, context, {
+                    status: "error",
+                    lastErrorAt: Date.now(),
+                    lastErrorMessage: error.message,
+                });
                 dataBus.emit("pluginError", { pluginId: plugin.id, message: `[${plugin.name || plugin.id}] ${error.message}`, error });
             },
             getPluginSettings: <T = unknown>(pluginId: string) => useStore.getState().dataConfig.pluginSettings[pluginId] as T | undefined,
@@ -176,12 +228,19 @@ class PluginManager {
             entities: [],
             context,
         });
+        emitSourceHealth(plugin, context, {
+            status: "idle",
+            itemCount: 0,
+            lastErrorMessage: null,
+        });
 
         try {
             await plugin.initialize(context);
         } catch (err) {
             console.error(`[PluginManager] Failed to initialize "${plugin.id}":`, err);
         }
+
+        applyFetchFallbacks(plugin, context);
 
         // Emit an event that a plugin was registered so the external store can assign default polling intervals
         dataBus.emit("pluginRegistered", {
@@ -201,7 +260,15 @@ class PluginManager {
                 const managed = this.plugins.get(plugin.id);
                 if (!managed || !managed.enabled) return;
                 try {
+                    const started = performance.now();
+                    emitSourceHealth(plugin, managed.context, {
+                        status: "loading",
+                        lastAttemptAt: Date.now(),
+                    });
                     const entities = await plugin.fetch(managed.context.timeRange);
+                    emitSourceHealth(plugin, managed.context, {
+                        latencyMs: Math.round(performance.now() - started),
+                    });
                     this.handleDataUpdate(plugin.id, entities);
                 } catch (err: unknown) {
                     dataBus.emit("layerLoadingChanged", { pluginId: plugin.id, loading: false });
@@ -238,6 +305,10 @@ class PluginManager {
 
         // Signal that data is loading
         dataBus.emit("layerLoadingChanged", { pluginId, loading: true });
+        emitSourceHealth(managed.plugin, managed.context, {
+            status: "loading",
+            lastAttemptAt: Date.now(),
+        });
 
         // Try to load from cache immediately so UI feels responsive
         let cached = cacheLayer.get(pluginId);
@@ -252,6 +323,9 @@ class PluginManager {
         }
 
         pollingManager.start(pluginId);
+        if (managed.plugin.getPollingInterval() <= 0 && !isDeclaredWebsocketPushOnly(managed.plugin)) {
+            void this.runInitialFetch(managed);
+        }
         console.debug(`[PluginManager] Emitting layerToggled true for ${pluginId}. Total setup took ${(performance.now() - start).toFixed(2)}ms`);
         dataBus.emit("layerToggled", { pluginId, enabled: true });
     }
@@ -273,6 +347,10 @@ class PluginManager {
         managed.enabled = false;
         managed.entities = [];
         pollingManager.stop(pluginId);
+        emitSourceHealth(managed.plugin, managed.context, {
+            status: "idle",
+            itemCount: 0,
+        });
         console.debug(`[PluginManager] Emitting layerToggled false for ${pluginId}`);
         dataBus.emit("layerToggled", { pluginId, enabled: false });
         dataBus.emit("dataUpdated", { pluginId, entities: [] });
@@ -320,8 +398,42 @@ class PluginManager {
         const managed = this.plugins.get(pluginId);
         if (!managed || !managed.enabled) return;
         managed.context.timeRange = timeRange;
+        const started = performance.now();
+        emitSourceHealth(managed.plugin, managed.context, {
+            status: "loading",
+            lastAttemptAt: Date.now(),
+        });
         const entities = await managed.plugin.fetch(timeRange);
+        emitSourceHealth(managed.plugin, managed.context, {
+            latencyMs: Math.round(performance.now() - started),
+        });
         this.handleDataUpdate(pluginId, entities);
+    }
+
+    private async runInitialFetch(managed: ManagedPlugin): Promise<void> {
+        const { plugin, entities, context } = managed;
+        try {
+            const started = performance.now();
+            emitSourceHealth(plugin, context, {
+                status: "loading",
+                lastAttemptAt: Date.now(),
+            });
+            const next = await plugin.fetch(context.timeRange);
+            if (!Array.isArray(next)) return;
+
+            const serverConfig = plugin.getServerConfig?.();
+            const isWsOnly = plugin.getPollingInterval() <= 0 && serverConfig?.pollingIntervalMs === 0;
+            if (next.length === 0 && isWsOnly && entities.length > 0) {
+                return;
+            }
+            emitSourceHealth(plugin, context, {
+                latencyMs: Math.round(performance.now() - started),
+            });
+            this.handleDataUpdate(plugin.id, next);
+        } catch (err: unknown) {
+            dataBus.emit("layerLoadingChanged", { pluginId: plugin.id, loading: false });
+            context.onError(err instanceof Error ? err : new Error(String(err)));
+        }
     }
 
     /**
@@ -467,6 +579,12 @@ class PluginManager {
 
         cacheLayer.set(pluginId, normalizedEntities, this.configCacheMaxAge);
         dataBus.emit("dataUpdated", { pluginId, entities: normalizedEntities });
+        emitSourceHealth(managed.plugin, managed.context, {
+            status: "healthy",
+            itemCount: normalizedEntities.length,
+            lastSuccessAt: Date.now(),
+            lastErrorMessage: null,
+        });
 
         // Clear loading indicator once first data arrives
         dataBus.emit("layerLoadingChanged", { pluginId, loading: false });

@@ -27,6 +27,8 @@ export function DataBusSubscriber() {
     const clearEntities = useStore((s) => s.clearEntities);
     const removeLayer = useStore((s) => s.removeLayer);
     const setLayerLoading = useStore((s) => s.setLayerLoading);
+    const setSourceHealth = useStore((s) => s.setSourceHealth);
+    const clearSourceHealth = useStore((s) => s.clearSourceHealth);
     const showErrorToast = useStore((s) => s.showErrorToast);
     const cacheMaxAge = useStore((s) => s.dataConfig.cacheMaxAge);
 
@@ -73,6 +75,7 @@ export function DataBusSubscriber() {
             setTimeout(() => {
                 clearEntities(pluginId);
                 removeLayer(pluginId);
+                clearSourceHealth(pluginId);
             }, 0);
         });
 
@@ -90,6 +93,12 @@ export function DataBusSubscriber() {
             }, 0);
         });
 
+        const unsubHealth = dataBus.on("sourceHealthChanged", ({ pluginId, patch }) => {
+            setTimeout(() => {
+                setSourceHealth(pluginId, patch);
+            }, 0);
+        });
+
         return () => {
             unsubReg();
             unsubUnreg();
@@ -97,8 +106,9 @@ export function DataBusSubscriber() {
             unsubToggle();
             unsubLoading();
             unsubError();
+            unsubHealth();
         };
-    }, [setPollingInterval, setEntities, setEntityCount, clearEntities, removeLayer, setLayerLoading, showErrorToast]);
+    }, [setPollingInterval, setEntities, setEntityCount, clearEntities, removeLayer, setLayerLoading, setSourceHealth, clearSourceHealth, showErrorToast]);
 
     return null;
 }

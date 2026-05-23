@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { GraphicsSettings } from "../GraphicsSettings";
 import { OverlayTab } from "./OverlayTab";
 import { PluginsTab } from "../PluginsTab";
+import { PluginDoctor } from "../PluginDoctor";
 import "@/plugins/geojson/geojson-importer.css";
 
 function StatusCard({
@@ -39,6 +40,7 @@ export function LocalSettingsTab() {
     const cameraAlt = useStore((s) => s.cameraAlt);
     const aviationCount = entitiesByPlugin.aviation?.length ?? layers.aviation?.entityCount ?? 0;
     const liveCount = Object.values(layers).filter((layer) => layer.enabled && (layer.entityCount ?? 0) > 0).length;
+    const hasCesiumIonToken = Boolean(process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN);
     const [engine, setEngine] = useState<{ status: "checking" | "online" | "offline"; count: number; error?: string }>({
         status: "checking",
         count: 0,
@@ -116,6 +118,12 @@ export function LocalSettingsTab() {
           <StatusCard tone="info" title="Offline Mode">
             Imports, cached data, and status checks stay available for this local copy.
           </StatusCard>
+          <StatusCard tone={hasCesiumIonToken ? "ok" : "warn"} title="Cesium Ion Token">
+            {hasCesiumIonToken
+                ? "Configured for Cesium terrain and asset access."
+                : "Missing NEXT_PUBLIC_CESIUM_ION_TOKEN. The app can run, but Cesium terrain or asset requests may fail."}
+          </StatusCard>
+          <PluginDoctor />
         </section>
 
         <section>

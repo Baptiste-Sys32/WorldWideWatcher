@@ -93,6 +93,7 @@ afterEach(() => {
     // teardown the AppShell uses at unmount.
     pluginManager.destroy();
     dataBus.removeAllListeners();
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
 });
 
@@ -146,6 +147,48 @@ describe("PluginManager.enablePlugin", () => {
         expect(dataHandler).toHaveBeenCalledWith({
             pluginId: "en-2",
             entities: cachedEntities,
+        });
+    });
+
+    it("uses the live cyber-attacks snapshot endpoint for the OTX initial fetch", async () => {
+        const fetchMock = vi.fn(async (url: string) => ({
+            ok: true,
+            json: async () => ({
+                items: [{
+                    id: "otx-1",
+                    ip: "203.0.113.10",
+                    lat: 35.6961,
+                    lon: 51.4231,
+                    threatType: "APT",
+                    pulseModified: "2026-05-22T12:00:00.000Z",
+                    malwareFamilies: ["sample-family"],
+                    tags: ["c2"],
+                    targetedCountries: ["IR"],
+                }],
+            }),
+        }));
+        vi.stubGlobal("fetch", fetchMock);
+        const dataHandler = vi.fn();
+        dataBus.on("dataUpdated", dataHandler);
+        await pluginManager.registerPlugin(makePlugin({ id: "cyber-attacks" }));
+
+        await pluginManager.enablePlugin("cyber-attacks");
+
+        await vi.waitFor(() => {
+            expect(fetchMock).toHaveBeenCalledWith("https://test.example/api/cyber-attacks");
+        });
+        expect(fetchMock.mock.calls[0][0]).not.toContain("/history");
+        await vi.waitFor(() => {
+            expect(dataHandler).toHaveBeenCalledWith({
+                pluginId: "cyber-attacks",
+                entities: [expect.objectContaining({
+                    id: "otx-1",
+                    pluginId: "cyber-attacks",
+                    latitude: 35.6961,
+                    longitude: 51.4231,
+                    label: "APT: 203.0.113.10",
+                })],
+            });
         });
     });
 });

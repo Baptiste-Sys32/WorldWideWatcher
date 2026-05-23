@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { PluginIcon } from "@/components/common/PluginIcon";
 import { pluginManager } from "@/core/plugins/PluginManager";
+import { getPluginTrust, resolvePluginMetadata } from "@/core/plugins/pluginMetadata";
+import { useStore } from "@/core/state/store";
 import { trackEvent } from "@/lib/analytics";
 import { isPluginInstallEnabled } from "@/core/edition";
 import "./PluginsTab.css";
@@ -79,6 +81,10 @@ function BrowseLink() {
 // ─── Helpers ────────────────────────────────────────────────
 
 function getTrust(record: PluginRecord): string {
+    const metadata = resolvePluginMetadata(record.pluginId);
+    if (metadata) return metadata.trust;
+    const managed = pluginManager.getPlugin(record.pluginId);
+    if (managed) return getPluginTrust(record.pluginId);
     if (record.version === "built-in") return "built-in";
     try {
         return JSON.parse(record.config).trust ?? "unverified";
@@ -120,6 +126,7 @@ function getName(record: PluginRecord): string {
  * and verifies integrity via trust badges.
  */
 export function PluginsTab({ showMarketplaceActions = false }: { showMarketplaceActions?: boolean }) {
+    const layers = useStore((s) => s.layers);
     const [plugins, setPlugins] = useState<PluginRecord[]>([]);
     const [removing, setRemoving] = useState<string | null>(null);
     const [updates, setUpdates] = useState<Record<string, string>>({});
@@ -145,7 +152,7 @@ export function PluginsTab({ showMarketplaceActions = false }: { showMarketplace
                         version: "built-in",
                         config: "{}",
                         installedAt: new Date().toISOString(),
-                        enabled: true
+                        enabled: layers[managed.plugin.id]?.enabled ?? false
                     });
                 }
             }
@@ -157,7 +164,7 @@ export function PluginsTab({ showMarketplaceActions = false }: { showMarketplace
         } catch {
             /* non-critical */
         }
-    }, []);
+    }, [layers]);
 
     useEffect(() => {
         // eslint-disable-next-line react-hooks/set-state-in-effect

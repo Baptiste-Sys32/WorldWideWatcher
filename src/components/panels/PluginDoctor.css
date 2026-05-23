@@ -1,0 +1,128 @@
+.plugin-doctor {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.plugin-doctor__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.plugin-doctor__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.plugin-doctor__header p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.plugin-doctor__run-all,
+.plugin-doctor-row__actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.plugin-doctor__run-all:hover,
+.plugin-doctor-row__actions button:hover {
+  border-color: var(--border-medium);
+  color: var(--text-primary);
+}
+
+.plugin-doctor-row__actions button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.plugin-doctor__list {
+  display: grid;
+  gap: 8px;
+}
+
+.plugin-doctor-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border: 1px solid var(--border-subtle);
+  border-left-width: 3px;
+  border-radius: var(--radius-md);
+  background: var(--bg-layer-1, var(--bg-secondary));
+}
+
+.plugin-doctor-row--ok { border-left-color: var(--accent-green); }
+.plugin-doctor-row--warn { border-left-color: var(--accent-amber); }
+.plugin-doctor-row--bad { border-left-color: var(--accent-red); }
+.plugin-doctor-row--info { border-left-color: var(--accent-blue); }
+
+.plugin-doctor-row__icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+}
+
+.plugin-doctor-row__main {
+  min-width: 0;
+}
+
+.plugin-doctor-row__top,
+.plugin-doctor-row__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.plugin-doctor-row__top span:first-child {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plugin-doctor-row__top span:last-child,
+.plugin-doctor-row__meta {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.plugin-doctor-row__details {
+  margin: 8px 0 0;
+  padding-left: 16px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.plugin-doctor-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

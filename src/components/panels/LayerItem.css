@@ -71,6 +71,7 @@
   align-items: center;
   gap: 6px;
   margin-top: 3px;
+  min-height: 16px;
 }
 
 /* ─── Unverified Icon ────────────────────────────── */
@@ -144,6 +145,42 @@
   background: var(--text-secondary);
   padding: 1px 6px;
   border-radius: var(--radius-sm);
+}
+
+.layer-item__health {
+  max-width: 92px;
+  overflow: hidden;
+  padding: 1px 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.layer-item__health--healthy {
+  border-color: rgba(34, 197, 94, 0.45);
+  color: var(--accent-green);
+}
+
+.layer-item__health--loading {
+  border-color: rgba(var(--accent-rgb), 0.35);
+  color: var(--accent-cyan);
+}
+
+.layer-item__health--degraded,
+.layer-item__health--stale {
+  border-color: rgba(245, 158, 11, 0.45);
+  color: var(--accent-amber);
+}
+
+.layer-item__health--error {
+  border-color: rgba(239, 68, 68, 0.5);
+  color: var(--accent-red);
 }
 
 /* ─── Loading Spinner ────────────────────────────────────── */

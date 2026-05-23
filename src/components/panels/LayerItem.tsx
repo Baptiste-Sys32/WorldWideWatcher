@@ -10,8 +10,9 @@
 import { ShieldAlert } from "lucide-react";
 import { PluginIcon } from "@/components/common/PluginIcon";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { pluginManager } from "@/core/plugins/PluginManager";
+import { getPluginTrust } from "@/core/plugins/pluginMetadata";
 import type { WorldPlugin } from "@/core/plugins/PluginTypes";
+import { useStore } from "@/core/state/store";
 import "./LayerItem.css";
 
 // ─── Trust Helpers ──────────────────────────────────────────
@@ -19,8 +20,7 @@ import "./LayerItem.css";
 type TrustTier = "built-in" | "verified" | "unverified";
 
 function getTrust(pluginId: string): TrustTier {
-    const manifest = pluginManager.getManifest(pluginId);
-    return manifest?.trust ?? "unverified";
+    return getPluginTrust(pluginId);
 }
 
 function TrustIcon({ trust }: { trust: TrustTier }) {
@@ -76,6 +76,25 @@ export function LayerItem({
     onSelect,
 }: LayerItemProps) {
     const trust = getTrust(plugin.id);
+    const health = useStore((s) => s.sourceHealthByPlugin[plugin.id]);
+    const healthStatus = isEnabled ? health?.status ?? (isLoading ? "loading" : "idle") : "idle";
+    const healthLabel = healthStatus === "healthy"
+        ? "Healthy"
+        : healthStatus === "degraded"
+            ? "Degraded"
+            : healthStatus === "error"
+                ? "Error"
+                : healthStatus === "stale"
+                    ? "Stale"
+                    : healthStatus === "loading" || isLoading
+                        ? "Loading"
+                        : "Idle";
+    const healthTitle = [
+        health?.sourceName,
+        healthLabel,
+        health?.lastSuccessAt ? `last success ${new Date(health.lastSuccessAt).toLocaleTimeString()}` : null,
+        health?.lastErrorMessage,
+    ].filter(Boolean).join(" · ");
 
     return (
       <div
@@ -93,6 +112,14 @@ export function LayerItem({
           </div>
           <div className="layer-item__desc">{plugin.description}</div>
           <div className="layer-item__footer">
+            {isEnabled && (
+              <span
+                className={`layer-item__health layer-item__health--${healthStatus}`}
+                title={healthTitle || healthLabel}
+              >
+                {healthLabel}
+              </span>
+            )}
             {isEnabled && !isLoading && entityCount > 0 && (
               <span className="layer-item__count">
                 {entityCount.toLocaleString()}

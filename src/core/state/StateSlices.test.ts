@@ -10,6 +10,7 @@ import { createConfigSlice } from "./configSlice";
 import { createFavoritesSlice } from "./favoritesSlice";
 import { createTimelineSlice } from "./timelineSlice";
 import { createFilterSlice } from "./filterSlice";
+import { createSourceHealthSlice } from "./sourceHealthSlice";
 
 describe("State Slices", () => {
   describe("GlobeSlice", () => {
@@ -167,6 +168,23 @@ describe("State Slices", () => {
 
       slice.clearFilters("p1");
       expect(state.filters.p1).toBeUndefined();
+    });
+  });
+
+  describe("SourceHealthSlice", () => {
+    it("sets and sanitizes source health", () => {
+      let state: any = { sourceHealthByPlugin: {} };
+      const set = (fn: any) => { state = { ...state, ...fn(state) }; };
+      const slice = createSourceHealthSlice(set, () => state as any, {} as any);
+
+      slice.setSourceHealth("p1", {
+        status: "error",
+        lastErrorMessage: "Failed https://example.test?token=secret Bearer abc.def",
+      });
+
+      expect(state.sourceHealthByPlugin.p1.status).toBe("error");
+      expect(state.sourceHealthByPlugin.p1.lastErrorMessage).toContain("token=[redacted]");
+      expect(state.sourceHealthByPlugin.p1.lastErrorMessage).toContain("Bearer [redacted]");
     });
   });
 });

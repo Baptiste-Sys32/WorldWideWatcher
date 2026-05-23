@@ -120,6 +120,10 @@ export function useMarketplaceSync(hostReady: boolean) {
             for (const manifest of manifests) {
                 if (!manifest.id) continue;
                 if (loadedIds.current.has(manifest.id)) continue;
+                if (pluginManager.getPlugin(manifest.id)) {
+                    loadedIds.current.add(manifest.id);
+                    continue;
+                }
 
                 // Unverified + not yet approved → collect for batch review
                 // On demo, skip the gate — admin already approved by installing
