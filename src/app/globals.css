@@ -2238,6 +2238,31 @@ body.is-dragging-bottom-panel .bottom-panel {
   min-width: 180px;
 }
 
+.header-fps-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 28px;
+  min-width: 52px;
+  padding: 0 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.header-fps-pill span:first-child {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
 .header .search-bar {
   max-width: 280px !important;
 }
@@ -2910,6 +2935,10 @@ body.is-dragging-bottom-panel .bottom-panel {
     flex: 1;
     width: auto;
     min-width: 0;
+  }
+
+  .header-fps-pill {
+    display: none;
   }
 
   .header .search-bar {

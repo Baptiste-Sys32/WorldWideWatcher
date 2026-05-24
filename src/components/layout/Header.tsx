@@ -49,6 +49,8 @@ export function Header() {
     const setOpenMobilePanel = useStore((s) => s.setOpenMobilePanel);
     const layers = useStore((s) => s.layers);
     const sourceHealthByPlugin = useStore((s) => s.sourceHealthByPlugin);
+    const showFps = useStore((s) => s.mapConfig.showFps);
+    const fps = useStore((s) => s.fps);
 
     const [isDemoAdmin, setIsDemoAdmin] = useState(false);
     const [themeOpen, setThemeOpen] = useState(false);
@@ -180,6 +182,12 @@ export function Header() {
             <div className="header__search-container">
               <SearchBar />
             </div>
+            {showFps && (
+              <div className="header-fps-pill" aria-label={`Current frame rate ${fps} FPS`}>
+                <span>{fps}</span>
+                <span>FPS</span>
+              </div>
+            )}
           </div>
 
           <div className="header__controls">

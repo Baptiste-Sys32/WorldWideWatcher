@@ -19,7 +19,7 @@ export function useViewerInitialization(sceneSettings: any) {
         viewer.imageryLayers.removeAll();
         viewer.scene.requestRenderMode = true;
         viewer.scene.maximumRenderTimeChange = 0.5;
-        viewer.scene.debugShowFramesPerSecond = sceneSettings.showFps;
+        viewer.scene.debugShowFramesPerSecond = false;
         viewer.resolutionScale = sceneSettings.resolutionScale;
         viewer.scene.postProcessStages.fxaa.enabled = sceneSettings.antiAliasing === "fxaa";
         const isFirefox = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('firefox');

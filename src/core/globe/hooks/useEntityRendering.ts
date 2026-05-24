@@ -31,7 +31,7 @@ export function useEntityRendering(
     useEffect(() => {
         if (!viewer || !isReady || viewer.isDestroyed()) return;
 
-        viewer.scene.debugShowFramesPerSecond = sceneSettings.showFps;
+        viewer.scene.debugShowFramesPerSecond = false;
         viewer.resolutionScale = sceneSettings.resolutionScale;
 
         // Apply Anti-Aliasing Mode
