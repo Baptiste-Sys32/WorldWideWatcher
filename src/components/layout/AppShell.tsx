@@ -84,24 +84,30 @@ export function AppShell() {
     }, [setTheme]);
 
     useEffect(() => {
+        let cancelled = false;
+
         const startPlatform = async () => {
             initLogCatcher();
 
             // Inject host libraries for dynamic plugin loading
             await injectHostGlobals();
+            if (cancelled) return;
             setHostReady(true);
 
             // Fetch disabled built-in plugins before registration
             let disabledIds = new Set<string>();
             try {
                 const res = await fetch("/api/marketplace/disabled-builtins");
+                if (cancelled) return;
                 if (res.ok) {
                     const data = await res.json();
+                    if (cancelled) return;
                     disabledIds = new Set<string>(data.disabledIds ?? []);
                 }
             } catch {
                 // Non-critical — load all built-ins if endpoint fails
             }
+            if (cancelled) return;
 
             // Setup demo defaults
             const demoDefaultPlugins = new Set<string>();
@@ -114,9 +120,12 @@ export function AppShell() {
             }
 
             await pluginManager.init();
+            if (cancelled) return;
 
             for (const plugin of pluginRegistry.getAll()) {
+                if (cancelled) return;
                 await pluginManager.registerPlugin(plugin);
+                if (cancelled) return;
                 let shouldEnable = false;
                 if (isDemo) {
                     shouldEnable = demoDefaultPlugins.has(plugin.id);
@@ -127,6 +136,7 @@ export function AppShell() {
                 initLayer(plugin.id, shouldEnable);
                 if (shouldEnable) {
                     await pluginManager.enablePlugin(plugin.id);
+                    if (cancelled) return;
                 }
             }
 
@@ -154,6 +164,7 @@ export function AppShell() {
         startPlatform();
 
         return () => {
+            cancelled = true;
             clearTimeout(safetyTimer);
             unsubGlobe();
             boot.cleanup();

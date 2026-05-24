@@ -95,6 +95,7 @@ class PluginManager {
     private loadedManifests: Map<string, PluginManifest> = new Map();
     private initialized = false;
     private configCacheMaxAge = 3600000;
+    private lifecycleVersion = 0;
 
     /**
      * Initializes the PluginManager and prepares the persistent cache layer.
@@ -143,6 +144,7 @@ class PluginManager {
             console.warn(`[PluginManager] Plugin "${plugin.id}" already registered`);
             return;
         }
+        const lifecycleVersion = this.lifecycleVersion;
 
         const envVars: Record<string, string> = {};
         if (typeof process !== "undefined" && process.env) {
@@ -252,6 +254,9 @@ class PluginManager {
         } catch (err) {
             console.error(`[PluginManager] Failed to initialize "${plugin.id}":`, err);
         }
+        if (lifecycleVersion !== this.lifecycleVersion || this.plugins.get(plugin.id)?.plugin !== plugin) {
+            return;
+        }
 
         applyFetchFallbacks(plugin, context);
 
@@ -304,9 +309,11 @@ class PluginManager {
      */
     async enablePlugin(pluginId: string): Promise<void> {
         const start = performance.now();
+        const lifecycleVersion = this.lifecycleVersion;
         console.debug(`[PluginManager] enablePlugin called for ${pluginId}`);
         // Ensure local manifest is fetched so we don't accidentally fall back to cloud if toggled too fast
         await fetchLocalEngineManifest();
+        if (lifecycleVersion !== this.lifecycleVersion) return;
         console.debug(`[PluginManager] Manifest fetched for ${pluginId}. Took ${(performance.now() - start).toFixed(2)}ms`);
 
         const managed = this.plugins.get(pluginId);
@@ -327,6 +334,7 @@ class PluginManager {
         let cached = cacheLayer.get(pluginId);
         if (!cached) {
             cached = await cacheLayer.getFromPersistent(pluginId);
+            if (lifecycleVersion !== this.lifecycleVersion) return;
         }
 
         // If still enabled and we got cached data, emit it
@@ -562,6 +570,7 @@ class PluginManager {
      * Essential for hot-module reloading and clean application shutdown.
      */
     destroy(): void {
+        this.lifecycleVersion += 1;
         pollingManager.stopAll();
         this.plugins.forEach((managed) => {
             try {
