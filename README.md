@@ -8,8 +8,8 @@
 *A modular situational awareness platform designed to ingest live data streams and render them as interactive, cinematic layers on a high-fidelity CesiumJS 3D globe.*
 
 [![NPM Version](https://img.shields.io/npm/v/@worldwideview/wwv-plugin-sdk.svg)](https://www.npmjs.com/package/@worldwideview/wwv-plugin-sdk)
-[![GitHub Release](https://img.shields.io/github/v/release/CatGPT-Sys32/worldwidewatcher?sort=semver)](https://github.com/CatGPT-Sys32/worldwidewatcher/releases)
-[![Contributors](https://img.shields.io/github/contributors/CatGPT-Sys32/worldwidewatcher.svg)](https://github.com/CatGPT-Sys32/worldwidewatcher/graphs/contributors)
+[![GitHub Release](https://img.shields.io/github/v/release/Baptiste-Sys32/worldwidewatcher?sort=semver)](https://github.com/Baptiste-Sys32/worldwidewatcher/releases)
+[![Contributors](https://img.shields.io/github/contributors/Baptiste-Sys32/worldwidewatcher.svg)](https://github.com/Baptiste-Sys32/worldwidewatcher/graphs/contributors)
 <br>
 [![Next.js 16](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org/)
 [![CesiumJS](https://img.shields.io/badge/Cesium-JS-4272D0)](https://cesium.com/)
@@ -85,13 +85,13 @@ WorldWideWatcher uses a multi-stage Dockerfile designed for standalone output. T
 **Mac/Linux:**
 ```bash
 mkdir worldwidewatcher && cd worldwidewatcher
-curl -fsSL https://raw.githubusercontent.com/CatGPT-Sys32/worldwidewatcher/main/self-host/setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Baptiste-Sys32/worldwidewatcher/main/self-host/setup.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
 mkdir worldwidewatcher; cd worldwidewatcher
-Invoke-WebRequest -Uri https://raw.githubusercontent.com/CatGPT-Sys32/worldwidewatcher/main/self-host/setup.ps1 -UseBasicParsing | Invoke-Expression
+Invoke-WebRequest -Uri https://raw.githubusercontent.com/Baptiste-Sys32/worldwidewatcher/main/self-host/setup.ps1 -UseBasicParsing | Invoke-Expression
 ```
 
 > [!NOTE]
@@ -102,7 +102,7 @@ Invoke-WebRequest -Uri https://raw.githubusercontent.com/CatGPT-Sys32/worldwidew
 To run the source code locally for contributing or developing:
 
 ```bash
-git clone https://github.com/CatGPT-Sys32/worldwidewatcher.git
+git clone https://github.com/Baptiste-Sys32/worldwidewatcher.git
 cd worldwidewatcher
 pnpm install
 pnpm run setup   # generates .env.local with AUTH_SECRET
