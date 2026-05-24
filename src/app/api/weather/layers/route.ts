@@ -18,6 +18,13 @@ export async function GET() {
         usesApiKey,
         freeTier: true,
         fallbackProvider: "Open-Meteo",
+        diagnostics: {
+            ok: true,
+            status: usesApiKey ? "openweathermap-configured" : "openweathermap-key-missing",
+            message: usesApiKey
+                ? "OpenWeatherMap key is configured; tile proxy can use OpenWeatherMap before fallback."
+                : "OPENWEATHERMAP_API_KEY is missing; tile proxy uses RainViewer/Open-Meteo fallback sources.",
+        },
         tileUrlTemplate: WEATHER_TILE_URL_TEMPLATE,
         layers: WEATHER_LAYERS,
     });

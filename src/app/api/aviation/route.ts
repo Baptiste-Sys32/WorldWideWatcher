@@ -37,7 +37,23 @@ interface AviationItem {
     last_contact: number;
 }
 
-let cache: { at: number; payload: { items: AviationItem[]; sourceTime: number | null; source: string } } | null = null;
+interface AviationResponse {
+    items: AviationItem[];
+    sourceTime: number | null;
+    source: "opensky";
+    sourceMode: "opensky-fallback";
+    sources: Array<{
+        sourceName: string;
+        scope: string;
+        ok: boolean;
+        count: number;
+        latencyMs: number;
+        errorMessage?: string;
+    }>;
+    error?: string;
+}
+
+let cache: { at: number; payload: AviationResponse } | null = null;
 
 const CACHE_MS = 10_000;
 const MAX_AIRCRAFT = 5_000;
@@ -95,6 +111,7 @@ export async function GET() {
         return NextResponse.json(cache.payload);
     }
 
+    const started = Date.now();
     const res = await fetch("https://opensky-network.org/api/states/all", {
         headers: {
             Accept: "application/json",
@@ -104,8 +121,23 @@ export async function GET() {
     });
 
     if (!res.ok) {
+        const error = `OpenSky returned HTTP ${res.status}`;
         return NextResponse.json(
-            { items: [], source: "opensky", error: `OpenSky returned HTTP ${res.status}` },
+            {
+                items: [],
+                sourceTime: null,
+                source: "opensky",
+                sourceMode: "opensky-fallback",
+                error,
+                sources: [{
+                    sourceName: "OpenSky fallback",
+                    scope: "global",
+                    ok: false,
+                    count: 0,
+                    latencyMs: Math.max(0, Date.now() - started),
+                    errorMessage: error,
+                }],
+            },
             { status: 502 },
         );
     }
@@ -120,8 +152,16 @@ export async function GET() {
     const payload = {
         items,
         sourceTime: data.time ?? null,
-        source: "opensky",
-    };
+        source: "opensky" as const,
+        sourceMode: "opensky-fallback" as const,
+        sources: [{
+            sourceName: "OpenSky fallback",
+            scope: "global",
+            ok: true,
+            count: items.length,
+            latencyMs: Math.max(0, Date.now() - started),
+        }],
+    } satisfies AviationResponse;
     cache = { at: Date.now(), payload };
 
     return NextResponse.json(payload);

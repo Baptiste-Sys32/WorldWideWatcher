@@ -14,8 +14,14 @@ import type {
     PluginCategory,
 } from "../PluginTypes";
 import type { PluginManifest } from "../PluginManifest";
+import type { SourceHealth } from "@/core/state/sourceHealthSlice";
+import { dataBus } from "@/core/data/DataBus";
 import { mapGeoJsonToEntities } from "./mapGeoJsonToEntities";
 import { mapJsonToEntities } from "./mapJsonToEntities";
+
+type EntitiesWithSourceHealth = GeoEntity[] & {
+    __wwvSourceHealthPatch?: Partial<SourceHealth>;
+};
 
 /**
  * A generic plugin implementation that derives its logic from a JSON manifest.
@@ -78,7 +84,19 @@ export class DeclarativePlugin implements WorldPlugin {
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
             const data = await res.json();
-            return this.parseResponse(data);
+            const entities = this.parseResponse(data) as EntitiesWithSourceHealth;
+            const patch = this.sourceHealthFromResponse(data, entities.length);
+            if (patch) {
+                Object.defineProperty(entities, "__wwvSourceHealthPatch", {
+                    value: patch,
+                    enumerable: false,
+                });
+                dataBus.emit("sourceHealthChanged", {
+                    pluginId: this.id,
+                    patch,
+                });
+            }
+            return entities;
         } catch (err) {
             console.error(`[DeclarativePlugin:${this.id}] Fetch error:`, err);
             return [];
@@ -168,5 +186,40 @@ export class DeclarativePlugin implements WorldPlugin {
             return mapGeoJsonToEntities(data, mapping, this.id);
         }
         return mapJsonToEntities(data, mapping, this.id, this.manifest.dataSource?.arrayPath);
+    }
+
+    private sourceHealthFromResponse(data: unknown, itemCount: number): Partial<SourceHealth> | null {
+        if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+        const record = data as Record<string, unknown>;
+        const sources = Array.isArray(record.sources)
+            ? record.sources.flatMap((source) => {
+                if (!source || typeof source !== "object" || Array.isArray(source)) return [];
+                const detail = source as Record<string, unknown>;
+                return [{
+                    sourceName: String(detail.sourceName ?? detail.name ?? "Source"),
+                    scope: String(detail.scope ?? "global"),
+                    ok: Boolean(detail.ok),
+                    count: typeof detail.count === "number" && Number.isFinite(detail.count) ? detail.count : 0,
+                    errorMessage: typeof detail.errorMessage === "string" ? detail.errorMessage : undefined,
+                    latencyMs: typeof detail.latencyMs === "number" && Number.isFinite(detail.latencyMs) ? detail.latencyMs : undefined,
+                }];
+            })
+            : undefined;
+        if (!sources?.length && !record.sourceMode && !record.error) return null;
+
+        const failedSources = sources?.filter((source) => !source.ok) ?? [];
+        return {
+            status: failedSources.length > 0 ? "degraded" : itemCount > 0 ? "healthy" : "idle",
+            sourceName: typeof record.sourceMode === "string"
+                ? record.sourceMode.replace(/-/g, " ")
+                : this.name,
+            sourceUrl: this.manifest.dataSource?.url,
+            sourceType: "rest",
+            fallbackActive: record.sourceMode === "opensky-fallback" || Boolean(record.fallbackActive),
+            itemCount,
+            sources,
+            lastErrorMessage: failedSources.map((source) => source.errorMessage).filter(Boolean).join("; ")
+                || (typeof record.error === "string" ? record.error : null),
+        };
     }
 }

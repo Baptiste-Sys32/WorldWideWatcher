@@ -51,7 +51,9 @@ export async function fetchLocalEngineManifest(): Promise<string[] | null> {
     );
     return localManifest;
   } catch {
-    console.log("[EngineManifest] No local engine detected, using cloud.");
+    if (process.env.NODE_ENV === "development") {
+      console.debug("[EngineManifest] No local engine detected; remote/plugin fallbacks remain available.");
+    }
     // We intentionally leave manifestFetched = true here.
     // This caches the failure so we don't incur this timeout penalty
     // every single time a plugin is toggled.

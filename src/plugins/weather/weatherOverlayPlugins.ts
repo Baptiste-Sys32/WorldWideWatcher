@@ -16,6 +16,7 @@ import {
     WEATHER_LAYERS,
     type WeatherLayerId,
 } from "./weatherLayers";
+import { dataBus } from "@/core/data/DataBus";
 
 export const WEATHER_OVERLAY_PLUGIN_IDS = WEATHER_LAYERS.map((layer) => layer.id) as WeatherLayerId[];
 
@@ -73,7 +74,64 @@ function makeWeatherPlugin(meta: (typeof WEATHER_PLUGIN_META)[number]): WorldPlu
         icon: meta.icon,
         category: "weather",
         version: "1.0.0",
-        async initialize() {},
+        async initialize() {
+            dataBus.emit("sourceHealthChanged", {
+                pluginId: meta.id,
+                patch: {
+                    status: "idle",
+                    sourceName: layerMeta?.providerLabel ?? "Weather tile proxy",
+                    sourceType: "static",
+                    sourceUrl: "/api/weather/layers",
+                    itemCount: 0,
+                },
+            });
+            try {
+                const started = performance.now();
+                dataBus.emit("sourceHealthChanged", {
+                    pluginId: meta.id,
+                    patch: { status: "loading", lastAttemptAt: Date.now() },
+                });
+                const response = await fetch("/api/weather/layers");
+                if (!response.ok) throw new Error(`Weather layers returned HTTP ${response.status}`);
+                const body = await response.json() as {
+                    provider?: string;
+                    usesApiKey?: boolean;
+                    diagnostics?: { message?: string };
+                };
+                dataBus.emit("sourceHealthChanged", {
+                    pluginId: meta.id,
+                    patch: {
+                        status: "healthy",
+                        sourceName: body.provider ?? layerMeta?.providerLabel ?? "Weather tile proxy",
+                        sourceType: "static",
+                        sourceUrl: "/api/weather/layers",
+                        lastSuccessAt: Date.now(),
+                        latencyMs: Math.round(performance.now() - started),
+                        fallbackActive: !body.usesApiKey,
+                        lastErrorMessage: body.diagnostics?.message ?? null,
+                        sources: [{
+                            sourceName: body.usesApiKey ? "OpenWeatherMap tile proxy" : "Open-Meteo/RainViewer fallback",
+                            scope: meta.id,
+                            ok: true,
+                            count: 0,
+                            latencyMs: Math.round(performance.now() - started),
+                        }],
+                    },
+                });
+            } catch (error) {
+                dataBus.emit("sourceHealthChanged", {
+                    pluginId: meta.id,
+                    patch: {
+                        status: "error",
+                        sourceName: layerMeta?.providerLabel ?? "Weather tile proxy",
+                        sourceType: "static",
+                        sourceUrl: "/api/weather/layers",
+                        lastErrorAt: Date.now(),
+                        lastErrorMessage: error instanceof Error ? error.message : String(error),
+                    },
+                });
+            }
+        },
         destroy() {},
         async fetch(_timeRange: TimeRange): Promise<GeoEntity[]> {
             return [];
