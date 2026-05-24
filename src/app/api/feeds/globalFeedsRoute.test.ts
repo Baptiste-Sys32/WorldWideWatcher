@@ -218,4 +218,58 @@ describe("global feed API route", () => {
             properties: expect.objectContaining({ interferenceLevel: "high" }),
         }));
     });
+
+    it("returns volcanic ash advisory items with source diagnostics", async () => {
+        vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+            if (url.includes("getElevatedVolcanoes")) {
+                return jsonResponse([{
+                    volcano_name: "Kilauea",
+                    vnum: "332010",
+                    sent_utc: "2026-05-19 19:56:32",
+                    color_code: "YELLOW",
+                    alert_level: "ADVISORY",
+                }]);
+            }
+            return jsonResponse([{
+                vnum: "332010",
+                volcano_name: "Kilauea",
+                latitude: 19.421,
+                longitude: -155.287,
+            }]);
+        }));
+
+        const response = await feedResponse("volcanic-ash-advisories");
+        const json = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(json.items).toEqual([
+            expect.objectContaining({
+                pluginId: "volcanic-ash-advisories",
+                properties: expect.objectContaining({ sourceName: "USGS HANS", colorCode: "yellow" }),
+            }),
+        ]);
+        expect(json.sources).toEqual([
+            expect.objectContaining({ sourceName: "USGS HANS", scope: "us", ok: true, count: 1 }),
+            expect.objectContaining({ sourceName: "France scoped fallback", scope: "france", ok: true, count: 0 }),
+        ]);
+    });
+
+    it("reports power outage feed limitation when no reliable public URL is configured", async () => {
+        vi.stubGlobal("fetch", vi.fn());
+
+        const response = await feedResponse("power-outages");
+        const json = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(json.items).toEqual([]);
+        expect(json.sources).toEqual([
+            expect.objectContaining({
+                sourceName: "Power outage public source",
+                scope: "us",
+                ok: false,
+                errorMessage: expect.stringContaining("POWER_OUTAGE_FEED_URL"),
+            }),
+            expect.objectContaining({ sourceName: "France scoped fallback", scope: "france", ok: true, count: 0 }),
+        ]);
+    });
 });

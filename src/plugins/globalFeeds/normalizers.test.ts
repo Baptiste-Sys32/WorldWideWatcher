@@ -9,6 +9,8 @@ import {
     normalizeNdbcLatest,
     normalizeNwsAlerts,
     normalizeOpenMeteoAirQuality,
+    normalizePowerOutages,
+    normalizeUsgsVolcanicAshAdvisories,
 } from "./normalizers";
 import type { FeedEntity } from "./types";
 
@@ -253,6 +255,62 @@ describe("global feed normalizers", () => {
                 sourceScope: "us",
                 sourceName: "NOAA/NWS",
                 scopeLabel: "US only",
+            },
+        });
+    });
+
+    it("normalizes USGS elevated volcano aviation advisories with joined coordinates", () => {
+        const items = normalizeUsgsVolcanicAshAdvisories([{
+            volcano_name: "Kilauea",
+            vnum: "332010",
+            sent_utc: "2026-05-19 19:56:32",
+            color_code: "YELLOW",
+            alert_level: "ADVISORY",
+            notice_url: "https://example.test/notice",
+        }], [{
+            vnum: "332010",
+            volcano_name: "Kilauea",
+            latitude: 19.421,
+            longitude: -155.287,
+            elevation_meters: 1222,
+        }]);
+
+        expect(items[0]).toMatchObject({
+            id: "volcanic-ash-advisories-us-332010",
+            pluginId: "volcanic-ash-advisories",
+            latitude: 19.421,
+            longitude: -155.287,
+            properties: {
+                sourceName: "USGS HANS",
+                colorCode: "yellow",
+                alertLevel: "advisory",
+                referenceUrl: "https://example.test/notice",
+            },
+        });
+    });
+
+    it("normalizes generic power outage GeoJSON features", () => {
+        const items = normalizePowerOutages({
+            features: [{
+                id: "outage-1",
+                geometry: { type: "Point", coordinates: [-75.1, 40.2] },
+                properties: {
+                    utility: "Example Utility",
+                    customersOut: 25000,
+                    updated: "2026-05-23T10:00:00Z",
+                    county: "Example County",
+                },
+            }],
+        });
+
+        expect(items[0]).toMatchObject({
+            pluginId: "power-outages",
+            latitude: 40.2,
+            longitude: -75.1,
+            properties: {
+                sourceName: "Example Utility",
+                customersOut: 25000,
+                outageLevel: "moderate",
             },
         });
     });

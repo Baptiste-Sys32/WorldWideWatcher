@@ -7,6 +7,8 @@ export type GlobalFeedId =
     | "flood-alerts"
     | "drought-vegetation"
     | "disease-outbreaks"
+    | "volcanic-ash-advisories"
+    | "power-outages"
     | "wildfire-hotspots"
     | "air-quality"
     | "marine-buoys"
@@ -19,6 +21,8 @@ export const BUILT_IN_GLOBAL_FEED_IDS = [
     "flood-alerts",
     "drought-vegetation",
     "disease-outbreaks",
+    "volcanic-ash-advisories",
+    "power-outages",
     "wildfire-hotspots",
     "air-quality",
     "marine-buoys",

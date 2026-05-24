@@ -20,6 +20,8 @@ import {
     Satellite,
     Signal,
     ThermometerSun,
+    TriangleAlert,
+    Zap,
     Waves,
 } from "lucide-react";
 import { cellToBoundary, cellToLatLng, latLngToCell } from "h3-js";
@@ -67,6 +69,19 @@ const FEED_META: Record<GlobalFeedId, {
         description: "WHO disease outbreak markers merged with France public health indicators.",
         color: "#dc2626",
         icon: Activity,
+    },
+    "volcanic-ash-advisories": {
+        name: "Volcanic Ash Advisories",
+        description: "USGS elevated volcano aviation color and alert notices joined to volcano locations.",
+        color: "#64748b",
+        icon: TriangleAlert,
+    },
+    "power-outages": {
+        name: "Power Grid Outages",
+        description: "Configurable public outage feed adapter. Empty until a reliable source URL is configured.",
+        color: "#facc15",
+        icon: Zap,
+        category: "infrastructure",
     },
     "wildfire-hotspots": {
         name: "Wildfire Hotspots",
@@ -121,6 +136,19 @@ const GPS_JAMMING_LEVELS = [
     { label: "High", value: "high", color: "#ef4444" },
     { label: "Medium", value: "medium", color: "#f97316" },
     { label: "Low", value: "low", color: "#eab308" },
+    { label: "Unknown", value: "unknown", color: "#94a3b8" },
+];
+
+const VOLCANIC_ASH_LEVELS = [
+    { label: "Red / Warning", value: "red", color: "#ef4444" },
+    { label: "Orange / Watch", value: "orange", color: "#f97316" },
+    { label: "Yellow / Advisory", value: "yellow", color: "#eab308" },
+];
+
+const POWER_OUTAGE_LEVELS = [
+    { label: "Major", value: "major", color: "#ef4444" },
+    { label: "Moderate", value: "moderate", color: "#f97316" },
+    { label: "Minor", value: "minor", color: "#eab308" },
     { label: "Unknown", value: "unknown", color: "#94a3b8" },
 ];
 
@@ -308,6 +336,14 @@ function severityColor(entity: GeoEntity, fallback: string): string {
         const level = String(entity.properties?.interferenceLevel ?? entity.properties?.severity ?? "").toLowerCase();
         return GPS_JAMMING_LEVELS.find((item) => item.value === level)?.color ?? fallback;
     }
+    if (entity.pluginId === "volcanic-ash-advisories") {
+        const level = String(entity.properties?.colorCode ?? entity.properties?.severity ?? "").toLowerCase();
+        return VOLCANIC_ASH_LEVELS.find((item) => item.value === level)?.color ?? fallback;
+    }
+    if (entity.pluginId === "power-outages") {
+        const level = String(entity.properties?.outageLevel ?? entity.properties?.severity ?? "").toLowerCase();
+        return POWER_OUTAGE_LEVELS.find((item) => item.value === level)?.color ?? fallback;
+    }
     const severity = String(entity.properties?.severity ?? "").toLowerCase();
     const parameter = String(entity.properties?.parameter ?? "").toLowerCase();
     const numericSeverity = Number(entity.properties?.severity ?? entity.properties?.value ?? entity.properties?.brightness);
@@ -364,17 +400,28 @@ export function createGlobalFeedPlugin(id: GlobalFeedId): WorldPlugin {
                 throw new Error(`${meta.name} feed returned HTTP ${response.status}`);
             }
             const body = await response.json() as Partial<FeedResponse>;
+            const sourcePriority = context?.getPluginSettings<{ sourcePriority?: string }>(id)?.sourcePriority;
+            const preferFrance = sourcePriority === "france-first";
+            const orderByPriority = <T extends { properties?: Record<string, unknown>; scope?: string }>(left: T, right: T) => {
+                if (!preferFrance) return 0;
+                const leftScope = String(left.scope ?? left.properties?.sourceScope ?? "");
+                const rightScope = String(right.scope ?? right.properties?.sourceScope ?? "");
+                return Number(rightScope === "france") - Number(leftScope === "france");
+            };
             const items = Array.isArray(body.items)
-                ? body.items.map((entity) => ({ ...entity, pluginId: id, timestamp: new Date(entity.timestamp) }))
+                ? body.items
+                    .map((entity) => ({ ...entity, pluginId: id, timestamp: new Date(entity.timestamp) }))
+                    .sort(orderByPriority)
                 : [];
             if (Array.isArray(body.sources)) {
+                const sources = [...body.sources].sort(orderByPriority);
                 const failedSources = body.sources.filter((source) => !source.ok);
                 const sourceHealthPatch = {
                     status: failedSources.length > 0 ? "degraded" as const : "healthy" as const,
                     sourceName: meta.name,
                     sourceUrl: `/api/feeds/${id}`,
                     sourceType: "composite" as const,
-                    sources: body.sources,
+                    sources,
                     lastErrorMessage: failedSources.map((source) => source.errorMessage).filter(Boolean).join("; ") || null,
                 };
                 Object.defineProperty(items, "__wwvSourceHealthPatch", {
@@ -464,6 +511,24 @@ export function createGlobalFeedPlugin(id: GlobalFeedId): WorldPlugin {
                     },
                 ];
             }
+            if (id === "volcanic-ash-advisories") {
+                return [{
+                    id: "ash-level",
+                    label: "Alert Level",
+                    type: "select" as const,
+                    propertyKey: "colorCode",
+                    options: VOLCANIC_ASH_LEVELS.map((item) => ({ label: item.label, value: item.value })),
+                }];
+            }
+            if (id === "power-outages") {
+                return [{
+                    id: "outage-level",
+                    label: "Outage Level",
+                    type: "select" as const,
+                    propertyKey: "outageLevel",
+                    options: POWER_OUTAGE_LEVELS.map((item) => ({ label: item.label, value: item.value })),
+                }];
+            }
             return [];
         },
 
@@ -481,6 +546,22 @@ export function createGlobalFeedPlugin(id: GlobalFeedId): WorldPlugin {
                     label: item.label,
                     color: item.color,
                     filterId: "interference-level",
+                    filterValue: item.value,
+                }));
+            }
+            if (id === "volcanic-ash-advisories") {
+                return VOLCANIC_ASH_LEVELS.map((item) => ({
+                    label: item.label,
+                    color: item.color,
+                    filterId: "ash-level",
+                    filterValue: item.value,
+                }));
+            }
+            if (id === "power-outages") {
+                return POWER_OUTAGE_LEVELS.map((item) => ({
+                    label: item.label,
+                    color: item.color,
+                    filterId: "outage-level",
                     filterValue: item.value,
                 }));
             }

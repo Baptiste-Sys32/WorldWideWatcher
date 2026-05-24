@@ -104,7 +104,9 @@ function severityFrom(value: unknown): string | number | undefined {
 }
 
 function dateFrom(value: unknown): Date {
-    const raw = typeof value === "string" || typeof value === "number" ? value : undefined;
+    const raw = typeof value === "number" && value > 0 && value < 100_000_000_000
+        ? value * 1000
+        : typeof value === "string" || typeof value === "number" ? value : undefined;
     const date = new Date(raw ?? Date.now());
     return Number.isNaN(date.getTime()) ? new Date() : date;
 }
@@ -373,6 +375,100 @@ export function normalizeFranceDiseaseIndicators(data: unknown): FeedEntity[] {
             country: "France",
         },
     }));
+}
+
+export function normalizeUsgsVolcanicAshAdvisories(elevatedData: unknown, volcanoData: unknown): FeedEntity[] {
+    const volcanoes = new Map<string, Record<string, unknown>>();
+    for (const raw of toArray(volcanoData)) {
+        if (!isRecord(raw)) continue;
+        const vnum = stringFrom(raw.vnum);
+        if (vnum) volcanoes.set(vnum, raw);
+    }
+
+    return toArray(elevatedData).flatMap((raw, index) => {
+        if (!isRecord(raw)) return [];
+        const vnum = stringFrom(raw.vnum);
+        const volcano = vnum ? volcanoes.get(vnum) : undefined;
+        const coords = volcano ? pickCoordinates(volcano) : pickCoordinates(raw);
+        if (!coords) return [];
+        const timestamp = dateFrom(raw.sent_utc ?? raw.sent_unixtime);
+        const colorCode = stringFrom(raw.color_code)?.toLowerCase() ?? "unknown";
+        const alertLevel = stringFrom(raw.alert_level)?.toLowerCase();
+        const volcanoName = stringFrom(raw.volcano_name ?? volcano?.volcano_name) ?? `Volcano ${index + 1}`;
+        return [{
+            id: `volcanic-ash-advisories-us-${slug(vnum ?? volcanoName)}`,
+            pluginId: "volcanic-ash-advisories",
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            altitude: numberFrom(volcano?.elevation_meters),
+            timestamp,
+            label: `${volcanoName} ${raw.color_code ?? raw.alert_level ?? "advisory"}`,
+            properties: {
+                ...volcano,
+                ...raw,
+                sourceScope: "us" as const,
+                sourceName: "USGS HANS",
+                eventType: "volcanic-ash-advisory",
+                country: "United States",
+                colorCode,
+                alertLevel,
+                severity: colorCode !== "unknown" ? colorCode : alertLevel,
+                provider: stringFrom(raw.obs_fullname ?? volcano?.obs_fullname),
+                referenceUrl: stringFrom(raw.notice_url ?? raw.notice_data ?? volcano?.volcano_url),
+                sourceTimestamp: stringFrom(raw.sent_utc),
+            },
+        }];
+    });
+}
+
+function outageLevel(customersOut: number | undefined): "major" | "moderate" | "minor" | "unknown" {
+    if (customersOut === undefined) return "unknown";
+    if (customersOut >= 100_000) return "major";
+    if (customersOut >= 10_000) return "moderate";
+    return "minor";
+}
+
+export function normalizePowerOutages(data: unknown): FeedEntity[] {
+    return toArray(data).flatMap((raw, index) => {
+        if (!isRecord(raw)) return [];
+        const properties = isRecord(raw.properties) ? raw.properties : raw;
+        const coords = pickCoordinates(raw) ?? pickCoordinates(properties);
+        if (!coords) return [];
+        const customersOut = numberFrom(
+            properties.customers_out
+            ?? properties.customersOut
+            ?? properties.outage_customers
+            ?? properties.outages
+            ?? properties.count,
+        );
+        const timestamp = dateFrom(properties.updated ?? properties.lastUpdated ?? properties.timestamp ?? properties.start_time);
+        const id = stringFrom(properties.id ?? raw.id)
+            ?? `${coords.latitude.toFixed(3)}-${coords.longitude.toFixed(3)}-${index}`;
+        const level = outageLevel(customersOut);
+        const provider = stringFrom(properties.utility ?? properties.provider ?? properties.sourceName) ?? "Power outage source";
+        return [{
+            id: `power-outages-us-${slug(id)}`,
+            pluginId: "power-outages",
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            timestamp,
+            label: stringFrom(properties.name ?? properties.area ?? properties.county)
+                ?? `${provider} outage`,
+            properties: {
+                ...properties,
+                sourceScope: "us" as const,
+                sourceName: provider,
+                eventType: "power-outage",
+                country: stringFrom(properties.country) ?? "United States",
+                customersOut,
+                outageLevel: level,
+                severity: level,
+                confidence: stringFrom(properties.confidence) ?? "provider-reported",
+                referenceUrl: stringFrom(properties.url ?? properties.referenceUrl),
+                sourceTimestamp: timestamp.toISOString(),
+            },
+        }];
+    });
 }
 
 export function normalizeFirmsCsv(csv: string): FeedEntity[] {

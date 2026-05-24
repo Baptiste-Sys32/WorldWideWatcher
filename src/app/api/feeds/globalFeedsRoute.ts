@@ -14,7 +14,9 @@ import {
     normalizeOpenAqLatest,
     normalizeOpenMeteoAirQuality,
     normalizePointFeed,
+    normalizePowerOutages,
     normalizePropluviaRestrictions,
+    normalizeUsgsVolcanicAshAdvisories,
     normalizeVigicruesStations,
     normalizeWhoDiseaseOutbreaks,
 } from "@/plugins/globalFeeds/normalizers";
@@ -61,6 +63,9 @@ const ENDPOINTS = {
     vigicruesStations: "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?size=1000&en_service=true",
     propluvia: "https://www.data.gouv.fr/api/1/datasets/restrictions-deau-propluvia/",
     santePubliqueFrance: "https://www.data.gouv.fr/api/1/organizations/sante-publique-france/",
+    usgsElevatedVolcanoes: "https://volcanoes.usgs.gov/hans-public/api/volcano/getElevatedVolcanoes",
+    usgsVolcanoes: "https://volcanoes.usgs.gov/hans-public/api/volcano/getUSVolcanoes",
+    powerOutages: process.env.POWER_OUTAGE_FEED_URL,
 };
 
 function textToPseudoItems(xml: string): unknown[] {
@@ -228,6 +233,43 @@ export async function fetchFranceDroughtVegetation(): Promise<FeedEntity[]> {
 export async function fetchGlobalDiseaseOutbreaks(): Promise<FeedEntity[]> {
     const data = await fetchJson(ENDPOINTS.whoDon);
     return normalizeWhoDiseaseOutbreaks(data);
+}
+
+export async function fetchVolcanicAshAdvisories(): Promise<FeedEntity[]> {
+    const [elevated, volcanoes] = await Promise.all([
+        fetchJson(ENDPOINTS.usgsElevatedVolcanoes),
+        fetchJson(ENDPOINTS.usgsVolcanoes),
+    ]);
+    return normalizeUsgsVolcanicAshAdvisories(elevated, volcanoes);
+}
+
+export async function fetchPowerOutages(): Promise<{ items: FeedEntity[]; sources: FeedSourceAudit[] }> {
+    if (!ENDPOINTS.powerOutages) {
+        return {
+            items: [],
+            sources: [{
+                sourceName: "Power outage public source",
+                scope: "us",
+                ok: false,
+                count: 0,
+                errorMessage: "No reliable public power outage feed configured. Set POWER_OUTAGE_FEED_URL to enable this feed.",
+                latencyMs: 0,
+            }],
+        };
+    }
+    const started = Date.now();
+    const data = await fetchJson(ENDPOINTS.powerOutages);
+    const items = normalizePowerOutages(data);
+    return {
+        items,
+        sources: [{
+            sourceName: "Configured power outage feed",
+            scope: "us",
+            ok: true,
+            count: items.length,
+            latencyMs: Math.max(0, Date.now() - started),
+        }],
+    };
 }
 
 export async function fetchFranceDiseaseOutbreaks(): Promise<FeedEntity[]> {
@@ -437,6 +479,30 @@ const ADAPTERS: Record<GlobalFeedId, { global: AdapterConfig; france: AdapterCon
             sourceName: "Sante publique France",
             scope: "france",
             adapter: fetchFranceDiseaseOutbreaks,
+        },
+    },
+    "volcanic-ash-advisories": {
+        global: {
+            sourceName: "USGS HANS",
+            scope: "us",
+            adapter: fetchVolcanicAshAdvisories,
+        },
+        france: {
+            sourceName: "France scoped fallback",
+            scope: "france",
+            adapter: async () => [],
+        },
+    },
+    "power-outages": {
+        global: {
+            sourceName: "Configured power outage feed",
+            scope: "us",
+            adapter: fetchPowerOutages,
+        },
+        france: {
+            sourceName: "France scoped fallback",
+            scope: "france",
+            adapter: async () => [],
         },
     },
     "wildfire-hotspots": {
