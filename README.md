@@ -7,8 +7,6 @@
 
 *A modular situational awareness platform designed to ingest live data streams and render them as interactive, cinematic layers on a high-fidelity CesiumJS 3D globe.*
 
-[![CI Build](https://github.com/CatGPT-Sys32/worldwidewatcher/actions/workflows/ci.yml/badge.svg)](https://github.com/CatGPT-Sys32/worldwidewatcher/actions/workflows/ci.yml)
-[![Codecov](https://img.shields.io/codecov/c/github/CatGPT-Sys32/worldwidewatcher.svg)](https://codecov.io/gh/CatGPT-Sys32/worldwidewatcher)
 [![NPM Version](https://img.shields.io/npm/v/@worldwideview/wwv-plugin-sdk.svg)](https://www.npmjs.com/package/@worldwideview/wwv-plugin-sdk)
 [![GitHub Release](https://img.shields.io/github/v/release/CatGPT-Sys32/worldwidewatcher?sort=semver)](https://github.com/CatGPT-Sys32/worldwidewatcher/releases)
 [![Contributors](https://img.shields.io/github/contributors/CatGPT-Sys32/worldwidewatcher.svg)](https://github.com/CatGPT-Sys32/worldwidewatcher/graphs/contributors)
