@@ -15,7 +15,6 @@ const config = [
             "local-plugins/**",
             "local-seeders/**",
             ".agents/**",
-            ".claude/**",
             ".gemini/**",
             "*.cjs",
         ],

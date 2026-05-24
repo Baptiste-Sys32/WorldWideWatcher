@@ -161,10 +161,6 @@ WorldWideWatcher is distributed across several specialized repositories:
 
 See [Docs: Development](docs/development.md) and [Docs: Testing](docs/testing.md) for more details.
 
-## Contributing
-
-We welcome community contributions! Please review our coding standards and PR processes before submitting code. For detailed instructions on local development and setting up your environment, see our [CONTRIBUTING.md](CONTRIBUTING.md).
-
 ## License
 
 This project is licensed under the Elastic License 2.0 - see the [LICENSE](LICENSE) file for details.
