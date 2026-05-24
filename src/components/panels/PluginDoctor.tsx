@@ -11,6 +11,11 @@ import {
     XCircle,
 } from "lucide-react";
 import { PluginIcon } from "@/components/common/PluginIcon";
+import {
+    getFeedRuntimeState,
+    labelForFeedState,
+    toneForFeedState,
+} from "@/core/diagnostics/feedHealth";
 import { pluginManager } from "@/core/plugins/PluginManager";
 import { getPluginAliases } from "@/core/plugins/pluginIds";
 import { resolvePluginMetadata } from "@/core/plugins/pluginMetadata";
@@ -39,9 +44,10 @@ interface DoctorResult {
  * @returns Visual tone used by the doctor UI.
  */
 function toneForStatus(status?: string): CheckTone {
-    if (status === "healthy") return "ok";
-    if (status === "error") return "bad";
-    if (status === "degraded" || status === "stale") return "warn";
+    if (status === "healthy") return toneForFeedState("healthy");
+    if (status === "error") return toneForFeedState("error");
+    if (status === "degraded" || status === "stale") return toneForFeedState("degraded");
+    if (status === "idle") return toneForFeedState("idle");
     return "info";
 }
 
@@ -277,7 +283,13 @@ export function PluginDoctor() {
               const layer = layers[plugin.id];
               const health = sourceHealthByPlugin[plugin.id];
               const result = results[plugin.id];
-              const tone = result?.tone ?? toneForStatus(health?.status);
+              const runtimeState = getFeedRuntimeState(
+                  Boolean(layer?.enabled),
+                  layer,
+                  health,
+                  entitiesByPlugin[plugin.id]?.length ?? layer?.entityCount ?? 0,
+              );
+              const tone = result?.tone ?? toneForFeedState(runtimeState);
               const Icon = tone === "ok" ? CheckCircle2 : tone === "bad" ? XCircle : tone === "warn" ? AlertTriangle : Activity;
               return (
                 <article key={plugin.id} className={`plugin-doctor-row plugin-doctor-row--${tone}`}>
@@ -291,7 +303,7 @@ export function PluginDoctor() {
                     </div>
                     <div className="plugin-doctor-row__meta">
                       <Icon size={13} />
-                      <span>{result?.summary ?? health?.status ?? "Not checked"}</span>
+                      <span>{result?.summary ?? labelForFeedState(runtimeState)}</span>
                       <span>{(entitiesByPlugin[plugin.id]?.length ?? 0).toLocaleString()} entities</span>
                       {health?.sourceName && <span>{health.sourceName}</span>}
                     </div>

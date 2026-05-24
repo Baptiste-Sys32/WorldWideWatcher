@@ -14,6 +14,7 @@ import { GraphicsSettings } from "../GraphicsSettings";
 import { OverlayTab } from "./OverlayTab";
 import { PluginsTab } from "../PluginsTab";
 import { PluginDoctor } from "../PluginDoctor";
+import { FeedHealthCenter } from "./FeedHealthCenter";
 import "@/plugins/geojson/geojson-importer.css";
 
 function StatusCard({
@@ -35,10 +36,8 @@ function StatusCard({
 
 export function LocalSettingsTab() {
     const layers = useStore((s) => s.layers);
-    const entitiesByPlugin = useStore((s) => s.entitiesByPlugin);
     const fps = useStore((s) => s.fps);
     const cameraAlt = useStore((s) => s.cameraAlt);
-    const aviationCount = entitiesByPlugin.aviation?.length ?? layers.aviation?.entityCount ?? 0;
     const liveCount = Object.values(layers).filter((layer) => layer.enabled && (layer.entityCount ?? 0) > 0).length;
     const hasCesiumIonToken = Boolean(process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN);
     const [engine, setEngine] = useState<{ status: "checking" | "online" | "offline"; count: number; error?: string }>({
@@ -103,12 +102,7 @@ export function LocalSettingsTab() {
                 ? `Connected on localhost:5000 with ${engine.count.toLocaleString()} local seeders.`
                 : engine.status === "checking"
                     ? "Checking localhost:5000 manifest..."
-                    : `Offline or blocked. Remote fallback remains active.${engine.error ? ` (${engine.error})` : ""}`}
-          </StatusCard>
-          <StatusCard tone={aviationCount > 0 ? "ok" : "warn"} title="Civil Aviation">
-            {aviationCount > 0
-                ? `${aviationCount.toLocaleString()} aviation entities are currently loaded.`
-                : "No aviation entities are loaded. Keep this explicit instead of showing a silent spinner."}
+                    : `Offline or blocked. Remote fallback remains active.${engine.error ? ` ${engine.error}` : ""}`}
           </StatusCard>
           <StatusCard tone="ok" title="Live Streams">
             {liveCount.toLocaleString()}
@@ -123,6 +117,7 @@ export function LocalSettingsTab() {
                 ? "Configured for Cesium terrain and asset access."
                 : "Missing NEXT_PUBLIC_CESIUM_ION_TOKEN. The app can run, but Cesium terrain or asset requests may fail."}
           </StatusCard>
+          <FeedHealthCenter />
           <PluginDoctor />
         </section>
 

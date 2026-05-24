@@ -23,6 +23,14 @@ import { PluginIcon } from "@/components/common/PluginIcon";
 import { PluginErrorBoundary } from "@/components/common/PluginErrorBoundary";
 import { FilterSection } from "@/components/panels/FilterPanel";
 import { dataBus } from "@/core/data/DataBus";
+import {
+    buildFeedDiagnostics,
+    formatPollingInterval,
+    getFeedRuntimeState,
+    getPluginSourceType,
+    labelForFeedState,
+    toneForFeedState,
+} from "@/core/diagnostics/feedHealth";
 import { useIsMobile } from "@/core/hooks/useIsMobile";
 import { useResizablePanel } from "@/core/hooks/useResizablePanel";
 import { pluginManager } from "@/core/plugins/PluginManager";
@@ -118,20 +126,14 @@ function pollingLabel(pluginId: string) {
     const managed = pluginManager.getPlugin(pluginId);
     if (!managed) return "Unknown";
     try {
-        const interval = managed.plugin.getPollingInterval();
-        if (interval <= 0) return "Push / manual";
-        return `${Math.round(interval / 1000)}s`;
+        return formatPollingInterval(managed.plugin.getPollingInterval());
     } catch {
         return "Unknown";
     }
 }
 
 function sourceTypeLabel(plugin: WorldPlugin) {
-    const config = plugin.getServerConfig?.();
-    if (config?.transportMode === "websocket") return "Push stream";
-    if (config?.transportMode === "static") return "Static";
-    if (config?.transportMode === "manual") return "Manual";
-    return plugin.getPollingInterval() > 0 ? "Polling" : "Push / manual";
+    return getPluginSourceType(plugin);
 }
 
 function canRefreshPlugin(plugin: WorldPlugin) {
@@ -168,6 +170,9 @@ export function DataConfigPanel() {
     const clearFilters = useStore((s) => s.clearFilters);
     const setHighlightLayerId = useStore((s) => s.setHighlightLayerId);
     const setSelectedEntity = useStore((s) => s.setSelectedEntity);
+    const setLayerEnabled = useStore((s) => s.setLayerEnabled);
+    const clearEntities = useStore((s) => s.clearEntities);
+    const setEntityCount = useStore((s) => s.setEntityCount);
     const setPollingInterval = useStore((s) => s.setPollingInterval);
     const dataConfig = useStore((s) => s.dataConfig);
     const [activeMode, setActiveMode] = useState<RightPanelMode>("intel");
@@ -185,13 +190,27 @@ export function DataConfigPanel() {
         ? ((entitiesByPlugin[pluginId] ?? []).length || layer?.entityCount || 0)
         : Object.values(layers).reduce((total, item) => total + (item.entityCount ?? 0), 0);
     const sourceHealth = pluginId ? sourceHealthByPlugin[pluginId] : undefined;
+    const focusedRuntimeState = getFeedRuntimeState(Boolean(layer?.enabled), layer, sourceHealth, entityCount);
     const weatherMeta = pluginId ? WEATHER_LAYER_META_BY_ID[pluginId as WeatherLayerId] : undefined;
     const legend = managed?.plugin.getLegend?.() ?? [];
     const activePluginFilters = pluginId ? filters[pluginId] ?? {} : {};
     const activeFilterCount = Object.keys(activePluginFilters).length;
-    const enabledLayers = enabledLayerIds
-        .map((id) => ({ id, managed: pluginManager.getPlugin(id), layer: layers[id], entities: entitiesByPlugin[id] ?? [] }))
-        .filter((item) => item.managed);
+    const feedLayers = pluginManager.getAllPlugins()
+        .map((itemManaged) => {
+            const id = itemManaged.plugin.id;
+            return {
+                id,
+                managed: itemManaged,
+                layer: layers[id] ?? { enabled: itemManaged.enabled, loading: false, entityCount: 0 },
+                entities: entitiesByPlugin[id] ?? [],
+            };
+        })
+        .sort((a, b) => {
+            const enabledDelta = Number(Boolean(b.layer.enabled)) - Number(Boolean(a.layer.enabled));
+            if (enabledDelta !== 0) return enabledDelta;
+            return a.managed.plugin.name.localeCompare(b.managed.plugin.name);
+        });
+    const enabledFeedLayers = feedLayers.filter((item) => Boolean(item.layer.enabled));
 
     const selectedProps = selectedEntity
         ? Object.entries(selectedEntity.properties ?? {}).slice(0, 8)
@@ -199,12 +218,12 @@ export function DataConfigPanel() {
     const DetailComp = selectedEntity ? managed?.plugin.getDetailComponent?.() : null;
     const SidebarComp = !selectedEntity ? managed?.plugin.getSidebarComponent?.() : null;
 
-    const statusTone: StatusTone = layer?.loading ? "info" : layer?.enabled ? "ok" : managed ? "warn" : "bad";
-    const statusTitle = selectedEntity ? "Entity Selected" : layer?.enabled ? "Layer Live" : managed ? "Layer Idle" : "No Focus";
+    const statusTone: StatusTone = selectedEntity ? "ok" : managed ? toneForFeedState(focusedRuntimeState) : "bad";
+    const statusTitle = selectedEntity ? "Entity Selected" : managed ? `Layer ${labelForFeedState(focusedRuntimeState)}` : "No Focus";
     const statusText = selectedEntity
         ? "Showing the selected entity from the active globe layer."
-        : layer?.enabled
-            ? `${entityCount.toLocaleString()} entities currently loaded for this feed.`
+            : layer?.enabled
+                ? `${entityCount.toLocaleString()} entities currently loaded for this feed.`
             : managed
                 ? "Layer is available but not currently enabled."
                 : "Select a feed or globe entity to populate the inspector.";
@@ -257,7 +276,7 @@ export function DataConfigPanel() {
         : activeRightOverlay === "filters"
             ? "time frame and data filters"
             : activeMode === "feeds"
-                ? `${enabledLayers.length} enabled feeds`
+                ? `${enabledLayerIds.length} enabled feeds`
                 : activeMode === "filters"
                     ? "time frame and data filters"
                     : activeMode === "settings"
@@ -331,19 +350,44 @@ export function DataConfigPanel() {
         return null;
     };
 
+    const toggleFeed = (id: string, enabled: boolean) => {
+        if (enabled) {
+            pluginManager.disablePlugin(id);
+            setLayerEnabled(id, false);
+            clearEntities(id);
+            setEntityCount(id, 0);
+            trackEvent("feed-toggle", { plugin: id, enabled: false, surface: "right-panel" });
+            return;
+        }
+
+        setLayerEnabled(id, true);
+        void pluginManager.enablePlugin(id);
+        setHighlightLayerId(id);
+        trackEvent("feed-toggle", { plugin: id, enabled: true, surface: "right-panel" });
+    };
+
     const renderFeedsMode = () => (
       <div className="config-panel__content">
-        {enabledLayers.length === 0 ? (
+        {enabledFeedLayers.length === 0 ? (
           <section className="status-card status-card--info">
             <span className="status-card__title">Feeds</span>
             <span className="status-card__text">No feeds are enabled.</span>
           </section>
-        ) : enabledLayers.map(({ id, managed: itemManaged, layer: itemLayer, entities }) => {
+        ) : enabledFeedLayers.map(({ id, managed: itemManaged, layer: itemLayer, entities }) => {
             if (!itemManaged) return null;
+            const isEnabled = Boolean(itemLayer?.enabled);
             const itemHealth = sourceHealthByPlugin[id];
             const refreshable = canRefreshPlugin(itemManaged.plugin);
+            const diagnostics = buildFeedDiagnostics({
+                plugin: itemManaged.plugin,
+                enabled: isEnabled,
+                layer: itemLayer,
+                health: itemHealth,
+                entityCount: entities.length || itemLayer?.entityCount || 0,
+                pollingIntervalMs: dataConfig.pollingIntervals[id] ?? itemManaged.plugin.getPollingInterval(),
+            });
             return (
-              <section key={id} className="inspector-card">
+              <section key={id} className={`inspector-card feed-card ${isEnabled ? "feed-card--on" : "feed-card--off"}`}>
                 <div className="feed-legend-card__header">
                   <div className="inspector-card__title">
                     <PluginIcon icon={itemManaged.plugin.icon} size={15} />
@@ -364,9 +408,9 @@ export function DataConfigPanel() {
                     <button
                       type="button"
                       className="feed-legend-card__clear"
-                      disabled={!refreshable}
-                      title={refreshable ? "Refresh feed" : "Push/manual feed"}
-                      aria-label={refreshable ? "Refresh feed" : "Push/manual feed"}
+                      disabled={!refreshable || !isEnabled}
+                      title={refreshable && isEnabled ? "Refresh feed" : "Refresh unavailable"}
+                      aria-label={refreshable && isEnabled ? "Refresh feed" : "Refresh unavailable"}
                       onClick={() => {
                           void pluginManager.fetchForPlugin(id, useStore.getState().timeRange);
                           trackEvent("feed-refresh", { plugin: id, surface: "right-panel" });
@@ -376,10 +420,11 @@ export function DataConfigPanel() {
                     </button>
                     <button
                       type="button"
-                      className="feed-legend-card__clear"
-                      onClick={() => pluginManager.disablePlugin(id)}
-                      title="Disable feed"
-                      aria-label="Disable feed"
+                      className={`feed-power-btn ${isEnabled ? "feed-power-btn--on" : "feed-power-btn--off"}`}
+                      onClick={() => toggleFeed(id, isEnabled)}
+                      title={isEnabled ? "Turn feed off" : "Turn feed on"}
+                      aria-label={isEnabled ? "Turn feed off" : "Turn feed on"}
+                      aria-pressed={isEnabled}
                     >
                       <Power size={13} />
                     </button>
@@ -387,10 +432,12 @@ export function DataConfigPanel() {
                 </div>
                 <table className="kv-table">
                   <tbody>
-                    <tr><td>Entities</td><td>{(entities.length || itemLayer?.entityCount || 0).toLocaleString()}</td></tr>
-                    <tr><td>Health</td><td>{itemHealth?.status ?? (itemLayer?.loading ? "loading" : "idle")}</td></tr>
-                    <tr><td>Source</td><td>{sourceTypeLabel(itemManaged.plugin)}</td></tr>
-                    <tr><td>Polling</td><td>{pollingLabel(id)}</td></tr>
+                    <tr><td>Entities</td><td>{diagnostics.entityCount.toLocaleString()}</td></tr>
+                    <tr><td>State</td><td>{diagnostics.enabled ? "On" : "Off"}</td></tr>
+                    <tr><td>Health</td><td>{labelForFeedState(diagnostics.runtimeState)}</td></tr>
+                    <tr><td>Source</td><td>{diagnostics.sourceType}</td></tr>
+                    <tr><td>Polling</td><td>{diagnostics.pollingLabel}</td></tr>
+                    <tr><td>Freshness</td><td>{diagnostics.sourceFreshness}</td></tr>
                   </tbody>
                 </table>
               </section>
@@ -441,7 +488,7 @@ export function DataConfigPanel() {
             </tbody>
           </table>
         </section>
-        {enabledLayers.map(({ id, managed: itemManaged }) => itemManaged ? (
+        {enabledFeedLayers.map(({ id, managed: itemManaged }) => itemManaged ? (
           <section key={id} className="inspector-card">
             <div className="inspector-card__title">{itemManaged.plugin.name}</div>
             <table className="kv-table">
@@ -616,18 +663,12 @@ export function DataConfigPanel() {
           )}
 
           {pluginId && sourceHealth && (
-            <section className={`status-card status-card--${
-                sourceHealth.status === "healthy" ? "ok"
-                    : sourceHealth.status === "error" ? "bad"
-                        : sourceHealth.status === "degraded" || sourceHealth.status === "stale" ? "warn"
-                            : "info"
-            }`}
-            >
+            <section className={`status-card status-card--${toneForFeedState(focusedRuntimeState)}`}>
               <span className="status-card__title">Source</span>
               <span className="status-card__text">
                 {(sourceHealth.sourceName ?? managed?.plugin.name ?? pluginId)}
                 {" · "}
-                {sourceHealth.status}
+                {labelForFeedState(focusedRuntimeState)}
                 {typeof sourceHealth.itemCount === "number" ? ` · ${sourceHealth.itemCount.toLocaleString()} items` : ""}
                 {typeof sourceHealth.latencyMs === "number" ? ` · ${sourceHealth.latencyMs} ms` : ""}
                 {sourceHealth.lastSuccessAt ? ` · updated ${new Date(sourceHealth.lastSuccessAt).toLocaleTimeString()}` : ""}

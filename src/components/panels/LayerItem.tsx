@@ -10,6 +10,7 @@
 import { ShieldAlert } from "lucide-react";
 import { PluginIcon } from "@/components/common/PluginIcon";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { getFeedRuntimeState, labelForFeedState } from "@/core/diagnostics/feedHealth";
 import { getPluginTrust } from "@/core/plugins/pluginMetadata";
 import type { WorldPlugin } from "@/core/plugins/PluginTypes";
 import { useStore } from "@/core/state/store";
@@ -77,18 +78,8 @@ export function LayerItem({
 }: LayerItemProps) {
     const trust = getTrust(plugin.id);
     const health = useStore((s) => s.sourceHealthByPlugin[plugin.id]);
-    const healthStatus = isEnabled ? health?.status ?? (isLoading ? "loading" : "idle") : "idle";
-    const healthLabel = healthStatus === "healthy"
-        ? "Healthy"
-        : healthStatus === "degraded"
-            ? "Degraded"
-            : healthStatus === "error"
-                ? "Error"
-                : healthStatus === "stale"
-                    ? "Stale"
-                    : healthStatus === "loading" || isLoading
-                        ? "Loading"
-                        : "Idle";
+    const healthStatus = getFeedRuntimeState(isEnabled, { enabled: isEnabled, loading: isLoading, entityCount }, health, entityCount);
+    const healthLabel = labelForFeedState(healthStatus);
     const healthTitle = [
         health?.sourceName,
         healthLabel,
