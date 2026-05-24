@@ -1,17 +1,17 @@
 <div align="center">
 
 <!-- Generated: 2026-04-23 06:11:00 UTC -->
-# WorldWideView
+# WorldWideWatcher
 
 **The Open-Source, Plugin-Driven Geospatial Intelligence Engine**
 
 *A modular situational awareness platform designed to ingest live data streams and render them as interactive, cinematic layers on a high-fidelity CesiumJS 3D globe.*
 
-[![CI Build](https://github.com/silvertakana/worldwideview/actions/workflows/ci.yml/badge.svg)](https://github.com/silvertakana/worldwideview/actions/workflows/ci.yml)
-[![Codecov](https://img.shields.io/codecov/c/github/silvertakana/worldwideview.svg)](https://codecov.io/gh/silvertakana/worldwideview)
+[![CI Build](https://github.com/CatGPT-Sys32/worldwidewatcher/actions/workflows/ci.yml/badge.svg)](https://github.com/CatGPT-Sys32/worldwidewatcher/actions/workflows/ci.yml)
+[![Codecov](https://img.shields.io/codecov/c/github/CatGPT-Sys32/worldwidewatcher.svg)](https://codecov.io/gh/CatGPT-Sys32/worldwidewatcher)
 [![NPM Version](https://img.shields.io/npm/v/@worldwideview/wwv-plugin-sdk.svg)](https://www.npmjs.com/package/@worldwideview/wwv-plugin-sdk)
-[![GitHub Release](https://img.shields.io/github/v/release/silvertakana/worldwideview?sort=semver)](https://github.com/silvertakana/worldwideview/releases)
-[![Contributors](https://img.shields.io/github/contributors/silvertakana/worldwideview.svg)](https://github.com/silvertakana/worldwideview/graphs/contributors)
+[![GitHub Release](https://img.shields.io/github/v/release/CatGPT-Sys32/worldwidewatcher?sort=semver)](https://github.com/CatGPT-Sys32/worldwidewatcher/releases)
+[![Contributors](https://img.shields.io/github/contributors/CatGPT-Sys32/worldwidewatcher.svg)](https://github.com/CatGPT-Sys32/worldwidewatcher/graphs/contributors)
 <br>
 [![Next.js 16](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org/)
 [![CesiumJS](https://img.shields.io/badge/Cesium-JS-4272D0)](https://cesium.com/)
@@ -21,13 +21,13 @@
 [![Discord](https://img.shields.io/discord/1481088998750294139?color=7289da&label=discord&logo=discord)](#)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://makeapullrequest.com)
 
-![WorldWideView Interface](docs/assets/screenshot.png)
+![WorldWideWatcher Interface](docs/assets/screenshot.png)
 
 </div>
 
 ---
 
-WorldWideView is a real-time geospatial engine visualizing live global data on an interactive 3D globe. Utilizing a dynamic "All-Bundle" plugin architecture, independent data sources—like live aircraft, maritime vessels, or conflict events—are ingested and rendered decoupled from the core 3D viewer.
+WorldWideWatcher is a real-time geospatial engine visualizing live global data on an interactive 3D globe. Utilizing a dynamic "All-Bundle" plugin architecture, independent data sources—like live aircraft, maritime vessels, or conflict events—are ingested and rendered decoupled from the core 3D viewer.
 
 ## Key Features
 
@@ -49,7 +49,7 @@ WorldWideView is a real-time geospatial engine visualizing live global data on a
 
 ## Project Architecture
 
-WorldWideView separates the data acquisition layer from the frontend rendering loop, using a real-time event bus to bridge them.
+WorldWideWatcher separates the data acquisition layer from the frontend rendering loop, using a real-time event bus to bridge them.
 
 ```mermaid
 flowchart TD
@@ -82,18 +82,18 @@ Before running the application, ensure you have the following installed:
 
 ## Quick Start (Self-Hosting)
 
-WorldWideView uses a multi-stage Dockerfile designed for standalone output. To deploy instantly on your own server:
+WorldWideWatcher uses a multi-stage Dockerfile designed for standalone output. To deploy instantly on your own server:
 
 **Mac/Linux:**
 ```bash
-mkdir worldwideview && cd worldwideview
-curl -fsSL https://raw.githubusercontent.com/silvertakana/worldwideview/main/self-host/setup.sh | bash
+mkdir worldwidewatcher && cd worldwidewatcher
+curl -fsSL https://raw.githubusercontent.com/CatGPT-Sys32/worldwidewatcher/main/self-host/setup.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-mkdir worldwideview; cd worldwideview
-Invoke-WebRequest -Uri https://raw.githubusercontent.com/silvertakana/worldwideview/main/self-host/setup.ps1 -UseBasicParsing | Invoke-Expression
+mkdir worldwidewatcher; cd worldwidewatcher
+Invoke-WebRequest -Uri https://raw.githubusercontent.com/CatGPT-Sys32/worldwidewatcher/main/self-host/setup.ps1 -UseBasicParsing | Invoke-Expression
 ```
 
 > [!NOTE]
@@ -104,8 +104,8 @@ Invoke-WebRequest -Uri https://raw.githubusercontent.com/silvertakana/worldwidev
 To run the source code locally for contributing or developing:
 
 ```bash
-git clone https://github.com/silvertakana/worldwideview.git
-cd worldwideview
+git clone https://github.com/CatGPT-Sys32/worldwidewatcher.git
+cd worldwidewatcher
 pnpm install
 pnpm run setup   # generates .env.local with AUTH_SECRET
 pnpm run dev:all # boots the UI, cache layers, and the data engine
@@ -124,7 +124,7 @@ You can also double-click `run-windows.cmd` from File Explorer. The launcher che
 The codebase utilizes a `pnpm` monorepo configuration:
 
 ```text
-worldwideview/
+worldwidewatcher/
 ├── src/                  # Core frontend app
 │   ├── app/              # Next.js App Router (pages, API routes)
 │   ├── components/       # Shared UI, Globe panels, and 3D layouts
@@ -139,20 +139,20 @@ worldwideview/
 
 ## Plugin Ecosystem
 
-WorldWideView operates on an open-core philosophy. The platform itself is data-agnostic; all data sources are dynamically imported as plugins at runtime.
+WorldWideWatcher operates on an open-core philosophy. The platform itself is data-agnostic; all data sources are dynamically imported as plugins at runtime.
 
 - **[Plugin Quickstart Guide](docs/plugin-quickstart.md)**: Learn how to scaffold and link your first plugin using the `@worldwideview/cli`.
 - **[Advanced Plugin Guide](docs/plugin-advanced.md)**: Deep dive into microservice data seeders, WebSockets, complex 3D rendering, and Marketplace publishing.
 
 ## Repository Ecosystem
 
-WorldWideView is distributed across several specialized repositories:
+WorldWideWatcher is distributed across several specialized repositories:
 
-1. **`worldwideview`** (This Repo): Main frontend, CesiumJS rendering engine, and core plugin framework.
+1. **`worldwidewatcher`** (This Repo): Main frontend, CesiumJS rendering engine, and core plugin framework.
 2. **`wwv-data-engine`**: Open-source community data backend for polling public APIs.
-3. **`worldwideview-plugins`**: First-party maintained plugins.
-4. **`worldwideview-marketplace`**: The web application driving the plugin directory.
-5. **`worldwideview-web`**: Marketing and landing site.
+3. **`worldwidewatcher-plugins`**: First-party maintained plugins.
+4. **`worldwidewatcher-marketplace`**: The web application driving the plugin directory.
+5. **`worldwidewatcher-web`**: Marketing and landing site.
 6. **[`szski/wwv-mcp`](https://github.com/szski/wwv-mcp)**: Reference MCP server for driving the globe from an LLM agent (Claude Code, Claude Desktop, Cursor, Cline, …) via the [Agent Bus](docs/agent-bus.md). Contributor-hosted today; may move under the project org.
 
 ## Development & Workflow
