@@ -201,10 +201,12 @@ export function BootOverlay({ visible }: BootOverlayProps) {
                   <span>{line}</span>
                 </div>
               ))}
-              <div className="boot-overlay__cursor-line">
-                <span>C:\WWV&gt;</span>
-                <span className="boot-overlay__cursor" />
-              </div>
+              {visibleLineCount >= BOOT_LINES.length && (
+                <div className="boot-overlay__cursor-line">
+                  <span>C:\WWV&gt;</span>
+                  <span className="boot-overlay__cursor" />
+                </div>
+              )}
             </div>
           </div>
         </div>

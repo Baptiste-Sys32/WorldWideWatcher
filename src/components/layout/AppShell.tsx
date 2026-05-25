@@ -150,7 +150,7 @@ export function AppShell() {
             if (process.env.NODE_ENV === "development") {
                 console.debug(`[AppShell] Starting boot sequence (${reason}).`);
             }
-            boot.startBoot();
+            boot.startBoot(reason === "safety-timeout" ? "safety" : "normal");
         };
 
         // Primary trigger: globe signals it is ready.
