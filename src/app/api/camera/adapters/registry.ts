@@ -6,6 +6,7 @@ import { ny511Adapter } from "./ny511";
 import { wsdotAdapter } from "./wsdot";
 import { ncdotAdapter } from "./ncdot";
 import { osmSurveillanceAdapter } from "./osm-surveillance";
+import { fl511Adapter } from "./fl511";
 
 /**
  * All registered adapters. To add a new source, add an import + push the
@@ -20,6 +21,7 @@ export const ALL_ADAPTERS: CameraAdapter[] = [
     ny511Adapter,
     wsdotAdapter,
     ncdotAdapter,
+    fl511Adapter,
     osmSurveillanceAdapter,
 ];
 
@@ -124,8 +126,8 @@ export async function fetchAdapter(adapter: CameraAdapter): Promise<CameraFeatur
             fetchedAt: new Date(now).toISOString(),
         });
         return data;
-    } catch (e: any) {
-        const errMsg = e?.message ?? String(e);
+    } catch (e: unknown) {
+        const errMsg = e instanceof Error ? e.message : String(e);
         if (c) {
             cache.set(adapter.id, { ...c, error: errMsg });
             return c.data;

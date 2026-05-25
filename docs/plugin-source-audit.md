@@ -46,3 +46,12 @@ Legacy engine manifest IDs such as `civilUnrest`, `conflictEvents`, `gpsjam`, `s
 - Remove any future UI copy that reports these three as failed cloud feeds without explaining their local/static source.
 - Weather overlay support was ported from upstream PR 153 using OpenWeatherMap tile proxy routes.
 - Weather overlay was verified locally with the Clouds layer: tile requests through `/api/weather/tile/...` returned `200` and rendered on the globe.
+
+## Camera Feed Follow-up
+
+Checked on 2026-05-25:
+
+- Added FL511 traffic cameras through Florida's public ArcGIS FeatureServer. It is an official no-key source with JSON/GeoJSON query support and snapshot image fields.
+- Iowa DOT is a good next no-key candidate. Its official 511 data-feeds page lists CCTV metadata/video/images and no-credential ESRI feature services, but the service schema still needs a current field audit before wiring it.
+- AZ511, FL511's developer REST API, and 511NY-style endpoints generally require developer keys; keep those behind optional env-var adapters if added.
+- Road511 and OpenWebcamDB can broaden coverage, but both are key/tier/attribution based rather than pure no-key open feeds. Do not make them default-on without explicit product/legal review.
