@@ -13,16 +13,16 @@ export interface BootState {
     controlsReady: boolean;
 }
 
-// Now event-driven (triggered after tiles load), so delays are short.
-// Camera fly-in starts immediately; overlay fades at 500ms.
+// The overlay intentionally lingers after the globe reports ready. In dev,
+// Next can still be compiling route chunks while the client begins booting.
 const DELAY = {
     flyIn: 0,
-    overlayFade: 500,
-    header: 1200,
-    sidebar: 1800,
-    timeline: 2400,
-    controls: 2700,
-    done: 3500,
+    overlayFade: 8_000,
+    header: 8_700,
+    sidebar: 9_300,
+    timeline: 9_900,
+    controls: 10_200,
+    done: 11_000,
 } as const;
 
 /**

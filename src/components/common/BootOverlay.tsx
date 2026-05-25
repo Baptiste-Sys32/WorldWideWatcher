@@ -7,7 +7,7 @@
 
 "use client";
 
-import type { CSSProperties } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./BootOverlay.css";
 
 const BOOT_TITLE = String.raw`
@@ -134,6 +134,8 @@ const BOOT_LINES = [
     "READY",
 ] as const;
 
+const BOOT_LINE_INTERVAL_MS = 65;
+
 /**
  * Props for the BootOverlay component.
  */
@@ -149,18 +151,51 @@ interface BootOverlayProps {
  * @param {BootOverlayProps} props - Component properties.
  */
 export function BootOverlay({ visible }: BootOverlayProps) {
+    const [visibleLineCount, setVisibleLineCount] = useState(0);
+    const logViewportRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!visible) return;
+
+        let nextLineCount = 0;
+        let timeout: number | undefined;
+
+        const revealNextLine = () => {
+            nextLineCount += 1;
+            setVisibleLineCount(nextLineCount);
+
+            if (nextLineCount < BOOT_LINES.length) {
+                timeout = window.setTimeout(revealNextLine, BOOT_LINE_INTERVAL_MS);
+            }
+        };
+
+        timeout = window.setTimeout(revealNextLine, 0);
+
+        return () => {
+            if (timeout !== undefined) {
+                window.clearTimeout(timeout);
+            }
+        };
+    }, [visible]);
+
+    useEffect(() => {
+        const viewport = logViewportRef.current;
+        if (!viewport) return;
+
+        viewport.scrollTop = viewport.scrollHeight;
+    }, [visibleLineCount]);
+
     return (
       <div className={`boot-overlay ${visible ? "" : "boot-overlay--hidden"}`}>
         <div className="boot-overlay__crt" aria-hidden="true" />
         <div className="boot-overlay__terminal" role="status" aria-live="polite">
           <pre className="boot-overlay__brand" aria-label="WorldWideWatcher">{BOOT_TITLE}</pre>
-          <div className="boot-overlay__log-viewport">
+          <div className="boot-overlay__log-viewport" ref={logViewportRef}>
             <div className="boot-overlay__log">
-              {BOOT_LINES.map((line, index) => (
+              {BOOT_LINES.slice(0, visibleLineCount).map((line, index) => (
                 <div
                   key={`${line}-${index}`}
                   className="boot-overlay__line"
-                  style={{ "--line-index": index } as CSSProperties}
                 >
                   <span className="boot-overlay__line-prefix">{index.toString().padStart(3, "0")}</span>
                   <span>{line}</span>
