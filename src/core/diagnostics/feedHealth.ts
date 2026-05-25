@@ -15,6 +15,7 @@ export interface FeedDiagnostics {
     sourceType: string;
     sourceName?: string;
     sourceUrl?: string;
+    sourceNote?: string;
     pollingIntervalMs: number;
     pollingLabel: string;
     lastSuccessAt?: number;
@@ -25,6 +26,13 @@ export interface FeedDiagnostics {
     fallbackActive: boolean;
     sources: SourceHealth["sources"];
 }
+
+const SOURCE_NOTES: Record<string, string> = {
+    aviation: "Uses the local OpenSky fallback when the cloud aviation snapshot is unavailable.",
+    "undersea-cables": "Uses the local Submarine Cable Map proxy; a cloud REST snapshot is not required.",
+    "air-defense": "Static ADIZ overlay; zero fetched entities does not indicate a broken cloud feed.",
+    "nuclear-facilities": "Uses embedded static GeoJSON from the plugin bundle rather than the cloud REST snapshot.",
+};
 
 export function formatTime(value?: number): string {
     if (!value) return "Never";
@@ -117,6 +125,7 @@ export function buildFeedDiagnostics(args: {
         sourceType: args.health?.sourceType ?? getPluginSourceType(args.plugin),
         sourceName: args.health?.sourceName ?? args.plugin.getServerConfig?.()?.sourceName ?? args.plugin.name,
         sourceUrl: args.health?.sourceUrl ?? args.plugin.getServerConfig?.()?.sourceUrl,
+        sourceNote: SOURCE_NOTES[args.plugin.id],
         pollingIntervalMs: intervalMs,
         pollingLabel: formatPollingInterval(intervalMs),
         lastSuccessAt: args.health?.lastSuccessAt,

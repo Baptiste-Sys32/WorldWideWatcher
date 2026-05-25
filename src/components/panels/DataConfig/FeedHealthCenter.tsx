@@ -149,6 +149,7 @@ export function FeedHealthCenter() {
                       {describeFeedState(diagnostics.runtimeState)}
                       {diagnostics.fallbackActive ? " · fallback active" : ""}
                       {diagnostics.latestError ? ` · ${diagnostics.latestError}` : ""}
+                      {diagnostics.sourceNote ? ` · ${diagnostics.sourceNote}` : ""}
                     </div>
                     <div className="feed-health-row__grid">
                       <span><b>Entities</b>{diagnostics.entityCount.toLocaleString()}</span>

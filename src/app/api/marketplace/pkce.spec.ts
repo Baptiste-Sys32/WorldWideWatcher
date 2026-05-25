@@ -17,7 +17,7 @@ vi.mock("openid-client", () => ({
 
 vi.mock("@/lib/auth/encryption", () => ({
     encryptCredential: vi.fn().mockResolvedValue({
-        version: 1,
+        version: "v2",
         salt: "mock-salt",
         nonce: "mock-nonce",
         ciphertext: "mock-ciphertext"

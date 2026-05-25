@@ -59,4 +59,16 @@ describe("feed health diagnostics", () => {
         });
         expect(diagnostics.sources).toHaveLength(2);
     });
+
+    it("adds context for feeds that intentionally use local or static sources", () => {
+        const diagnostics = buildFeedDiagnostics({
+            plugin: { ...plugin, id: "air-defense", name: "Air Defense" },
+            enabled: true,
+            layer: { enabled: true, loading: false, entityCount: 0 },
+            entityCount: 0,
+            health: { status: "idle" },
+        });
+
+        expect(diagnostics.sourceNote).toContain("Static ADIZ overlay");
+    });
 });
