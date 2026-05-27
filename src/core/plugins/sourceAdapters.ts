@@ -104,6 +104,53 @@ function mapCyberThreatItems(items: unknown[]): GeoEntity[] {
     });
 }
 
+function toNumber(value: unknown, fallback = 0): number {
+    return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function mapAviationItems(items: unknown[]): GeoEntity[] {
+    return items.flatMap((raw) => {
+        const item = asRecord(raw);
+        const latitude = item.lat;
+        const longitude = item.lon;
+        const icao24 = typeof item.icao24 === "string" ? item.icao24 : undefined;
+        if (!icao24 || typeof latitude !== "number" || typeof longitude !== "number") return [];
+
+        const lastContact = toNumber(item.last_contact, Date.now() / 1000);
+        const altitude = toNumber(item.alt, 0);
+        const heading = typeof item.hdg === "number" && Number.isFinite(item.hdg) ? item.hdg : undefined;
+        const speed = typeof item.spd === "number" && Number.isFinite(item.spd) ? item.spd : undefined;
+        const callsign = typeof item.callsign === "string" && item.callsign.trim()
+            ? item.callsign.trim()
+            : icao24;
+
+        return [{
+            id: `aviation-${icao24}`,
+            pluginId: "aviation",
+            latitude,
+            longitude,
+            altitude,
+            heading,
+            speed,
+            timestamp: new Date(lastContact * 1000),
+            label: callsign,
+            properties: {
+                icao24,
+                callsign,
+                origin_country: item.origin_country,
+                altitude_m: altitude,
+                heading_deg: heading,
+                speed_mps: speed,
+                vertical_rate: item.vertical_rate,
+                on_ground: Boolean(item.on_ground),
+                squawk: item.squawk,
+                time_position: item.time_position,
+                last_contact: item.last_contact,
+            },
+        }];
+    });
+}
+
 function extractItems(body: unknown): unknown[] {
     const record = asRecord(body);
     if (Array.isArray(record.data)) return record.data;
@@ -111,7 +158,72 @@ function extractItems(body: unknown): unknown[] {
     return [];
 }
 
+function sourceHealthFromRecord(body: unknown, itemCount: number): Partial<{
+    status: "idle" | "loading" | "healthy" | "degraded" | "error" | "stale";
+    fallbackActive: boolean;
+    itemCount: number;
+    sources: Array<{
+        sourceName: string;
+        scope: string;
+        ok: boolean;
+        count: number;
+        errorMessage?: string;
+        latencyMs?: number;
+    }>;
+    lastErrorMessage: string | null;
+}> | null {
+    const record = asRecord(body);
+    const sources = Array.isArray(record.sources)
+        ? record.sources.flatMap((source) => {
+            const detail = asRecord(source);
+            if (!Object.keys(detail).length) return [];
+            return [{
+                sourceName: String(detail.sourceName ?? detail.name ?? "Source"),
+                scope: String(detail.scope ?? "global"),
+                ok: Boolean(detail.ok),
+                count: toNumber(detail.count, 0),
+                errorMessage: typeof detail.errorMessage === "string" ? detail.errorMessage : undefined,
+                latencyMs: typeof detail.latencyMs === "number" && Number.isFinite(detail.latencyMs) ? detail.latencyMs : undefined,
+            }];
+        })
+        : [];
+    if (!sources.length && !record.sourceMode && !record.error) return null;
+
+    const failedSources = sources.filter((source) => !source.ok);
+    return {
+        status: failedSources.length > 0 ? "degraded" : itemCount > 0 ? "healthy" : "idle",
+        fallbackActive: record.sourceMode === "opensky-fallback" || Boolean(record.fallbackActive),
+        itemCount,
+        sources,
+        lastErrorMessage: failedSources.map((source) => source.errorMessage).filter(Boolean).join("; ")
+            || (typeof record.error === "string" ? record.error : null),
+    };
+}
+
 export function applyFetchFallbacks(plugin: WorldPlugin, context: PluginContext): void {
+    if (plugin.id === "aviation") {
+        const originalFetch = plugin.fetch.bind(plugin);
+        plugin.fetch = async (timeRange: TimeRange) => {
+            try {
+                const primary = await originalFetch(timeRange);
+                if (Array.isArray(primary) && primary.length > 0) return primary;
+            } catch {
+                // Fall through to the local OpenSky proxy.
+            }
+            const res = await fetch(`${getEngineBaseUrl(context)}/api/aviation`);
+            if (!res.ok) throw new Error(`Aviation fallback API returned ${res.status}`);
+            const body = await res.json();
+            const entities = mapAviationItems(extractItems(body)) as GeoEntity[] & {
+                __wwvSourceHealthPatch?: ReturnType<typeof sourceHealthFromRecord>;
+            };
+            const sourceHealth = sourceHealthFromRecord(body, entities.length);
+            if (sourceHealth) {
+                entities.__wwvSourceHealthPatch = sourceHealth;
+            }
+            return entities;
+        };
+    }
+
     if (plugin.id === "civil-unrest") {
         const originalFetch = plugin.fetch.bind(plugin);
         plugin.fetch = async (timeRange: TimeRange) => {

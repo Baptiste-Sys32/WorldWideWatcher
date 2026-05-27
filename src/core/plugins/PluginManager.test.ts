@@ -198,6 +198,80 @@ describe("PluginManager.enablePlugin", () => {
         });
     });
 
+    it("falls back to the local aviation proxy when the data engine snapshot fails", async () => {
+        const fetchMock = vi.fn(async (url: string) => {
+            expect(url).toMatch(/\/api\/aviation$/);
+            return {
+                ok: true,
+                json: async () => ({
+                    items: [{
+                        icao24: "abc123",
+                        callsign: "WWV123",
+                        origin_country: "France",
+                        lat: 48.8566,
+                        lon: 2.3522,
+                        alt: 12000,
+                        hdg: 90,
+                        spd: 220,
+                        vertical_rate: 0,
+                        on_ground: false,
+                        squawk: null,
+                        time_position: 1_779_802_800,
+                        last_contact: 1_779_802_800,
+                    }],
+                    sourceMode: "opensky-fallback",
+                    sources: [{
+                        sourceName: "OpenSky fallback",
+                        scope: "global",
+                        ok: true,
+                        count: 1,
+                        latencyMs: 12,
+                    }],
+                }),
+            };
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        const dataHandler = vi.fn();
+        dataBus.on("dataUpdated", dataHandler);
+        await pluginManager.registerPlugin(makePlugin({
+            id: "aviation",
+            fetch: async () => {
+                throw new Error("Data Engine API returned 500");
+            },
+            getPollingInterval: () => 0,
+            getServerConfig: () => ({
+                apiBasePath: "/api/aviation",
+                transportMode: "websocket",
+                pollingIntervalMs: 0,
+                sourceName: "Aviation",
+            }),
+        }));
+
+        await pluginManager.enablePlugin("aviation");
+
+        await vi.waitFor(() => {
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+        });
+        await vi.waitFor(() => {
+            expect(dataHandler).toHaveBeenCalledWith({
+                pluginId: "aviation",
+                entities: [expect.objectContaining({
+                    id: "aviation-abc123",
+                    pluginId: "aviation",
+                    latitude: 48.8566,
+                    longitude: 2.3522,
+                    altitude: 12000,
+                    heading: 90,
+                    label: "WWV123",
+                    properties: expect.objectContaining({
+                        altitude_m: 12000,
+                        on_ground: false,
+                    }),
+                })],
+            });
+        });
+    });
+
     it("runs one initial fetch for static or manual plugins with polling disabled", async () => {
         const fetchSpy = vi.fn(async () => [makeEntity("static-1", "static-layer")]);
         const dataHandler = vi.fn();

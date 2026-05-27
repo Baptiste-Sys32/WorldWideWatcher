@@ -106,43 +106,60 @@ function toItem(state: OpenSkyState): AviationItem | null {
     };
 }
 
+function degradedResponse(started: number, error: string) {
+    return NextResponse.json({
+        items: cache?.payload.items ?? [],
+        sourceTime: cache?.payload.sourceTime ?? null,
+        source: "opensky",
+        sourceMode: "opensky-fallback",
+        error,
+        sources: [{
+            sourceName: "OpenSky fallback",
+            scope: "global",
+            ok: false,
+            count: cache?.payload.items.length ?? 0,
+            latencyMs: Math.max(0, Date.now() - started),
+            errorMessage: error,
+        }],
+    } satisfies AviationResponse);
+}
+
 export async function GET() {
     if (cache && Date.now() - cache.at < CACHE_MS) {
         return NextResponse.json(cache.payload);
     }
 
     const started = Date.now();
-    const res = await fetch("https://opensky-network.org/api/states/all", {
-        headers: {
-            Accept: "application/json",
-            "User-Agent": "WorldWideView Local Aviation Fallback",
-        },
-        next: { revalidate: 0 },
-    });
-
-    if (!res.ok) {
-        const error = `OpenSky returned HTTP ${res.status}`;
-        return NextResponse.json(
-            {
-                items: [],
-                sourceTime: null,
-                source: "opensky",
-                sourceMode: "opensky-fallback",
-                error,
-                sources: [{
-                    sourceName: "OpenSky fallback",
-                    scope: "global",
-                    ok: false,
-                    count: 0,
-                    latencyMs: Math.max(0, Date.now() - started),
-                    errorMessage: error,
-                }],
+    let res: Response;
+    try {
+        res = await fetch("https://opensky-network.org/api/states/all", {
+            headers: {
+                Accept: "application/json",
+                "User-Agent": "WorldWideView Local Aviation Fallback",
             },
-            { status: 502 },
+            next: { revalidate: 0 },
+        });
+    } catch (err) {
+        return degradedResponse(
+            started,
+            err instanceof Error ? err.message : "OpenSky request failed",
         );
     }
 
-    const data = await res.json() as { time?: number; states?: OpenSkyState[] | null };
+    if (!res.ok) {
+        const error = `OpenSky returned HTTP ${res.status}`;
+        return degradedResponse(started, error);
+    }
+
+    let data: { time?: number; states?: OpenSkyState[] | null };
+    try {
+        data = await res.json() as { time?: number; states?: OpenSkyState[] | null };
+    } catch (err) {
+        return degradedResponse(
+            started,
+            err instanceof Error ? err.message : "OpenSky returned invalid JSON",
+        );
+    }
     const states = Array.isArray(data.states) ? data.states : [];
     const items = states
         .map(toItem)
