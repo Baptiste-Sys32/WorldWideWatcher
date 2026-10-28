@@ -3,13 +3,11 @@
 <!-- Generated: 2026-04-23 06:11:00 UTC -->
 # WorldWideWatcher
 
-**The Open-Source, Plugin-Driven Geospatial Intelligence Engine**
-
-*A modular situational awareness platform designed to ingest live data streams and render them as interactive, cinematic layers on a high-fidelity CesiumJS 3D globe.*
+A 3D globe viewer for live geospatial feeds. Next.js + CesiumJS, with a plugin system so each data source (aircraft, vessels, cameras) ships separately from the core viewer.
 
 [![NPM Version](https://img.shields.io/npm/v/@worldwideview/wwv-plugin-sdk.svg)](https://www.npmjs.com/package/@worldwideview/wwv-plugin-sdk)
-[![GitHub Release](https://img.shields.io/github/v/release/Baptiste-Sys32/worldwidewatcher?sort=semver)](https://github.com/Baptiste-Sys32/worldwidewatcher/releases)
-[![Contributors](https://img.shields.io/github/contributors/Baptiste-Sys32/worldwidewatcher.svg)](https://github.com/Baptiste-Sys32/worldwidewatcher/graphs/contributors)
+[![GitHub Release](https://img.shields.io/github/v/release/Baptiste-Sys32/WorldWideWatcher?sort=semver)](https://github.com/Baptiste-Sys32/WorldWideWatcher/releases)
+[![Contributors](https://img.shields.io/github/contributors/Baptiste-Sys32/WorldWideWatcher.svg)](https://github.com/Baptiste-Sys32/WorldWideWatcher/graphs/contributors)
 <br>
 [![Next.js 16](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org/)
 [![CesiumJS](https://img.shields.io/badge/Cesium-JS-4272D0)](https://cesium.com/)
@@ -25,14 +23,14 @@
 
 ---
 
-WorldWideWatcher is a real-time geospatial engine visualizing live global data on an interactive 3D globe. Utilizing a dynamic "All-Bundle" plugin architecture, independent data sources—like live aircraft, maritime vessels, or conflict events—are ingested and rendered decoupled from the core 3D viewer.
+WorldWideWatcher plots live data on an interactive 3D globe. Each source is a separate plugin (aircraft, maritime vessels, cameras), fed through a WebSocket event bus into the viewer.
 
 ## Key Features
 
-- **"All-Bundle" Plugin Architecture**: Ingest any data source dynamically without touching the core platform.
-- **High-Fidelity 3D Rendering**: Google Photorealistic 3D Tiles and LOD modeling powered by CesiumJS.
-- **Real-Time Data Pipeline**: High-frequency WebSocket updates managed by a custom `DataBus`.
-- **Advanced Entity Management**: Automatic horizon culling, chunked primitive rendering, and 3D stacking/spiderification.
+- **Plugin architecture**: Add data sources without changing the core platform.
+- **3D rendering**: Google Photorealistic 3D Tiles and LOD modeling through CesiumJS.
+- **Live data pipeline**: Frequent WebSocket updates managed by a custom `DataBus`.
+- **Entity management**: Automatic horizon culling, chunked primitive rendering, and 3D stacking/spiderification.
 - **Marketplace Integration**: Download and sync new plugins directly from the UI.
 - **Agent Bus (opt-in)**: HTTP+SSE control surface that lets an external tool — typically an MCP server fronting an LLM — fly the globe, toggle layers, and select entities in the running browser session. Default off; see [Agent Bus docs](docs/agent-bus.md).
 
@@ -84,14 +82,14 @@ WorldWideWatcher uses a multi-stage Dockerfile designed for standalone output. T
 
 **Mac/Linux:**
 ```bash
-mkdir worldwidewatcher && cd worldwidewatcher
-curl -fsSL https://raw.githubusercontent.com/Baptiste-Sys32/worldwidewatcher/main/self-host/setup.sh | bash
+mkdir WorldWideWatcher && cd WorldWideWatcher
+curl -fsSL https://raw.githubusercontent.com/Baptiste-Sys32/WorldWideWatcher/main/self-host/setup.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
 mkdir worldwidewatcher; cd worldwidewatcher
-Invoke-WebRequest -Uri https://raw.githubusercontent.com/Baptiste-Sys32/worldwidewatcher/main/self-host/setup.ps1 -UseBasicParsing | Invoke-Expression
+Invoke-WebRequest -Uri https://raw.githubusercontent.com/Baptiste-Sys32/WorldWideWatcher/main/self-host/setup.ps1 -UseBasicParsing | Invoke-Expression
 ```
 
 > [!NOTE]
@@ -102,8 +100,8 @@ Invoke-WebRequest -Uri https://raw.githubusercontent.com/Baptiste-Sys32/worldwid
 To run the source code locally for contributing or developing:
 
 ```bash
-git clone https://github.com/Baptiste-Sys32/worldwidewatcher.git
-cd worldwidewatcher
+git clone https://github.com/Baptiste-Sys32/WorldWideWatcher.git
+cd WorldWideWatcher
 pnpm install
 pnpm run setup   # generates .env.local with AUTH_SECRET
 pnpm run dev:all # boots the UI, cache layers, and the data engine
@@ -122,7 +120,7 @@ You can also double-click `run-windows.cmd` from File Explorer. The launcher che
 The codebase utilizes a `pnpm` monorepo configuration:
 
 ```text
-worldwidewatcher/
+WorldWideWatcher/
 ├── src/                  # Core frontend app
 │   ├── app/              # Next.js App Router (pages, API routes)
 │   ├── components/       # Shared UI, Globe panels, and 3D layouts
@@ -146,7 +144,7 @@ WorldWideWatcher operates on an open-core philosophy. The platform itself is dat
 
 WorldWideWatcher is distributed across several specialized repositories:
 
-1. **`worldwidewatcher`** (This Repo): Main frontend, CesiumJS rendering engine, and core plugin framework.
+1. **`WorldWideWatcher`** (This Repo): Main frontend, CesiumJS rendering engine, and core plugin framework.
 2. **`wwv-data-engine`**: Open-source community data backend for polling public APIs.
 3. **`worldwidewatcher-plugins`**: First-party maintained plugins.
 4. **`worldwidewatcher-marketplace`**: The web application driving the plugin directory.
@@ -164,6 +162,10 @@ See [Docs: Development](docs/development.md) and [Docs: Testing](docs/testing.md
 ## License
 
 This project is licensed under the Elastic License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+## Note
+
+Fork of a vibecoded prototype, rough edges throughout. It runs, but do not expect clean architecture.
 
 ## Documentation Index
 
